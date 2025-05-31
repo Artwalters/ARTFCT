@@ -1,14 +1,18 @@
 {
-  "name": "threejs-journey-exercise",
-  "private": true,
-  "version": "0.0.0",
+  "name": "onemanarmy",
+  "private": false,
+  "version": "1.0.0",
   "type": "module",
+  "homepage": "https://artwalters.github.io/OneManArmy",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "4.3",
+    "gh-pages": "^6.3.0",
     "vite": "^6.2.2",
     "vite-plugin-restart": "^0.4.2"
   },
