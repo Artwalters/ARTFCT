@@ -189,16 +189,47 @@ export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplet
     }, [canvasSize])
     
     
-    // Handle click to activate terminal
+    // Handle click to activate terminal and mobile input
     useEffect(() => {
+        const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+        
         const handleClick = () => {
             if (!terminalActive) {
                 setTerminalActive(true)
             }
+            
+            // Always focus hidden input on mobile when terminal is active
+            if (isMobile && terminalActive) {
+                const hiddenInput = document.getElementById('mobile-input')
+                if (hiddenInput) {
+                    hiddenInput.focus()
+                }
+            }
+        }
+        
+        const handleTouch = () => {
+            if (!terminalActive) {
+                setTerminalActive(true)
+            }
+            
+            // Focus hidden input on touch to trigger virtual keyboard
+            const hiddenInput = document.getElementById('mobile-input')
+            if (hiddenInput) {
+                setTimeout(() => hiddenInput.focus(), 100)
+            }
         }
         
         window.addEventListener('click', handleClick)
-        return () => window.removeEventListener('click', handleClick)
+        if (isMobile) {
+            window.addEventListener('touchstart', handleTouch)
+        }
+        
+        return () => {
+            window.removeEventListener('click', handleClick)
+            if (isMobile) {
+                window.removeEventListener('touchstart', handleTouch)
+            }
+        }
     }, [terminalActive])
     
     // Track mouse for parallax effect
@@ -213,7 +244,7 @@ export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplet
         return () => window.removeEventListener('mousemove', handleMouseMove)
     }, [])
     
-    // Handle keyboard input
+    // Handle keyboard input for desktop and mobile
     useEffect(() => {
         const handleKeyPress = (e) => {
             // Always allow typing, activate terminal if not active
@@ -259,8 +290,78 @@ export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplet
             }
         }
         
+        // Mobile input handler
+        const handleMobileInput = (e) => {
+            const value = e.target.value
+            const lastChar = value[value.length - 1]
+            
+            if (value.length > currentCommand.length && lastChar) {
+                // Character added
+                setCurrentCommand(prev => prev + lastChar)
+                if (!terminalActive) {
+                    setTerminalActive(true)
+                }
+            } else if (value.length < currentCommand.length) {
+                // Character removed (backspace)
+                setCurrentCommand(prev => prev.slice(0, -1))
+            }
+            
+            // Clear the hidden input to allow continuous typing
+            setTimeout(() => {
+                e.target.value = ''
+            }, 0)
+        }
+        
+        // Mobile enter handler
+        const handleMobileEnter = (e) => {
+            if (e.key === 'Enter' || e.keyCode === 13) {
+                if (!typingContent) {
+                    const cmd = currentCommand.trim().toLowerCase()
+                    
+                    if (cmd === 'clear') {
+                        setTerminalContent([])
+                        setScrollOffset(0)
+                    } else {
+                        setTerminalContent(prev => [...prev, `> ${currentCommand}`])
+                        
+                        let responseLines = []
+                        if (commands[cmd]) {
+                            responseLines = [...commands[cmd], '']
+                        } else {
+                            responseLines = [`Command not found: ${cmd}`, '']
+                        }
+                        
+                        setTypingContent({
+                            lines: responseLines,
+                            currentLine: 0,
+                            currentChar: 0
+                        })
+                        typingStartTime.current = Date.now()
+                    }
+                    
+                    setCurrentCommand('')
+                    setScrollOffset(0)
+                }
+                e.preventDefault()
+            }
+        }
+        
+        // Add event listeners
         window.addEventListener('keydown', handleKeyPress)
-        return () => window.removeEventListener('keydown', handleKeyPress)
+        
+        const mobileInput = document.getElementById('mobile-input')
+        if (mobileInput) {
+            mobileInput.addEventListener('input', handleMobileInput)
+            mobileInput.addEventListener('keydown', handleMobileEnter)
+        }
+        
+        return () => {
+            window.removeEventListener('keydown', handleKeyPress)
+            if (mobileInput) {
+                mobileInput.removeEventListener('input', handleMobileInput)
+                mobileInput.removeEventListener('keydown', handleMobileEnter)
+            }
+        }
     }, [currentCommand, terminalContent, terminalActive, typingContent, terminalTypingComplete, portfolioShown, handleEnterPress])
     
     // Handle scroll
