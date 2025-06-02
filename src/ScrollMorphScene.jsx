@@ -1,28 +1,24 @@
 import { useRef, useEffect, useMemo, useCallback } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { ScrollToPlugin } from 'gsap/ScrollToPlugin'
 
-// Register GSAP plugins once
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin)
 
-// NEW APPROACH: Use 3 uniforms - currentShape, targetShape, and progress
 const vertexShader = `
     attribute vec3 aRandom3;
     attribute float aRandom;
     
-    uniform float uProgress;
+    uniform float uMorphProgress;
     uniform float uTime;
-    uniform float uScrollProgress;
     uniform int uCurrentShape;
     uniform int uTargetShape;
     
     varying vec3 vColor;
     varying float vRandom;
     
-    // Generate sphere positions
     vec3 getSphere(float index, float total) {
         float golden = 3.14159 * (3.0 - sqrt(5.0));
         float y = 1.0 - (index / (total - 1.0)) * 2.0;
@@ -36,12 +32,10 @@ const vertexShader = `
         );
     }
     
-    // Generate cube positions
     vec3 getCube(vec3 random) {
         return (random - 0.5) * 3.0;
     }
     
-    // Generate torus positions
     vec3 getTorus(vec3 random) {
         float u = random.x * 6.28318;
         float v = random.y * 6.28318;
@@ -55,7 +49,6 @@ const vertexShader = `
         );
     }
     
-    // Generate pyramid positions
     vec3 getPyramid(vec3 random) {
         float level = random.x;
         float angle = random.y * 6.28318;
@@ -68,7 +61,6 @@ const vertexShader = `
         );
     }
     
-    // Generate spiral positions
     vec3 getSpiral(vec3 random) {
         float t = random.x;
         float angle = t * 6.28318 * 4.0;
@@ -81,7 +73,6 @@ const vertexShader = `
         );
     }
     
-    // Get position for specific shape
     vec3 getShapePosition(int shapeIndex, float index, float total, vec3 random) {
         if (shapeIndex == 0) return getSphere(index, total);
         else if (shapeIndex == 1) return getCube(random);
@@ -95,37 +86,27 @@ const vertexShader = `
         vRandom = aRandom;
         
         float index = float(gl_VertexID);
-        float total = 25000.0; // or particleCount
+        float total = 25000.0;
         
-        // Get current and target positions based on uniforms
         vec3 currentPos = getShapePosition(uCurrentShape, index, total, aRandom3);
         vec3 targetPos = getShapePosition(uTargetShape, index, total, aRandom3);
         
-        // Smooth morphing between current and target
-        vec3 morphedPosition = mix(currentPos, targetPos, uProgress);
+        vec3 morphedPosition = mix(currentPos, targetPos, uMorphProgress);
         
-        // Add organic movement
         float timeOffset = uTime + aRandom * 6.28318;
-        float scrollWobble = sin(uScrollProgress * 12.566 + aRandom * 6.28318) * 0.05;
-        morphedPosition += sin(timeOffset) * (0.01 + scrollWobble);
-        
-        // Scroll-based expansion
-        morphedPosition *= (1.0 + uScrollProgress * 0.2);
+        morphedPosition += sin(timeOffset) * 0.01;
         
         vec4 mvPosition = modelViewMatrix * vec4(morphedPosition, 1.0);
         
-        // Dynamic point size
-        float size = 4.0 * (1.0 + uScrollProgress * 0.5);
+        float size = 4.0;
         gl_PointSize = size * (200.0 / -mvPosition.z);
         
         gl_Position = projectionMatrix * mvPosition;
     }
 `
 
-// Optimized fragment shader
 const fragmentShader = `
     uniform vec3 uGlowColor;
-    uniform float uScrollProgress;
     
     varying vec3 vColor;
     varying float vRandom;
@@ -136,21 +117,17 @@ const fragmentShader = `
         
         if (dist > 0.5) discard;
         
-        // Smooth circular falloff
         float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
         alpha = pow(alpha, 1.2);
         
-        // Dynamic sparkle effect
-        float sparkle = sin(vRandom * 100.0 + uScrollProgress * 15.0) * 0.3 + 0.7;
+        float sparkle = sin(vRandom * 100.0) * 0.3 + 0.7;
         
-        // Color blending with glow
         vec3 finalColor = mix(vColor, uGlowColor, 0.6) * sparkle;
         
         gl_FragColor = vec4(finalColor, alpha);
     }
 `
 
-// Shape configuration
 const SHAPES = [
     { name: 'Sphere', color: 0x8A2BE2 },
     { name: 'Cube', color: 0xFF8C00 },
@@ -159,30 +136,44 @@ const SHAPES = [
     { name: 'Spiral', color: 0xFF1493 }
 ]
 
-function ParticleSystem({ particleCount = 25000 }) {
-    // Refs for performance
+function ScrollMorphParticles({ particleCount = 25000 }) {
     const meshRef = useRef()
     const materialRef = useRef()
-    const geometryRef = useRef()
+    const { camera } = useThree()
     
-    // Simple state management - NO geometry updates
-    const currentShapeRef = useRef(0)  // Sphere
-    const targetShapeRef = useRef(1)   // Cube
+    const currentShapeRef = useRef(0)
+    const scrollProgressRef = useRef(0)
     const isTransitioningRef = useRef(false)
-    const hasTriggeredRef = useRef(false)
+    const transitionCompleteRef = useRef(false)
+    const scrollTimeoutRef = useRef(null)
+    const animatedProgressRef = useRef(0)
     
-    // Create geometry ONCE - never update it
+    // Detect mobile for camera distance
+    const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
+    const initialZ = isMobile ? 12 : 10
+    
+    const baseCameraZ = useRef(initialZ)
+    const currentCameraZ = useRef(initialZ)
+    
+    // Set initial camera position and handle scene start
+    useEffect(() => {
+        // Force camera to correct position
+        camera.position.set(0, 0, initialZ)
+        currentCameraZ.value = initialZ
+        
+        // Also update the current position ref from Experience.jsx
+        camera.updateProjectionMatrix()
+    }, [camera, initialZ])
+    
     const geometry = useMemo(() => {
         const geo = new THREE.BufferGeometry()
         
-        // Simple positions - not used in new shader
         const positions = new Float32Array(particleCount * 3)
         for (let i = 0; i < particleCount * 3; i++) {
             positions[i] = 0
         }
         geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
         
-        // Random values for shape generation
         const randoms = new Float32Array(particleCount)
         const randoms3 = new Float32Array(particleCount * 3)
         for (let i = 0; i < particleCount; i++) {
@@ -194,7 +185,6 @@ function ParticleSystem({ particleCount = 25000 }) {
         geo.setAttribute('aRandom', new THREE.BufferAttribute(randoms, 1))
         geo.setAttribute('aRandom3', new THREE.BufferAttribute(randoms3, 3))
         
-        // Colors
         const colors = new Float32Array(particleCount * 3)
         const baseColor = new THREE.Color(SHAPES[0].color)
         for (let i = 0; i < particleCount; i++) {
@@ -208,15 +198,13 @@ function ParticleSystem({ particleCount = 25000 }) {
         return geo
     }, [particleCount])
     
-    // Create material with shape uniforms
     const material = useMemo(() => {
         return new THREE.ShaderMaterial({
             uniforms: {
                 uTime: { value: 0 },
-                uProgress: { value: 0 },
-                uScrollProgress: { value: 0 },
-                uCurrentShape: { value: 0 },  // Sphere
-                uTargetShape: { value: 1 },   // Cube
+                uMorphProgress: { value: 0 },
+                uCurrentShape: { value: 0 },
+                uTargetShape: { value: 1 },
                 uGlowColor: { value: new THREE.Color(SHAPES[0].color) }
             },
             vertexShader,
@@ -228,22 +216,11 @@ function ParticleSystem({ particleCount = 25000 }) {
         })
     }, [])
     
-    // Complete transition - only update uniforms
-    const completeTransition = useCallback(() => {
-        const target = targetShapeRef.current
-        
-        // Move to next shape
-        currentShapeRef.current = target
-        targetShapeRef.current = (target + 1) % SHAPES.length
-        
-        // Update shader uniforms - NO geometry changes
-        materialRef.current.uniforms.uCurrentShape.value = currentShapeRef.current
-        materialRef.current.uniforms.uTargetShape.value = targetShapeRef.current
-        
-        // Update colors
-        const colorAttr = geometryRef.current.getAttribute('color')
-        const color = new THREE.Color(SHAPES[currentShapeRef.current].color)
+    const updateColors = useCallback((shapeIndex) => {
+        const colorAttr = geometry.getAttribute('color')
+        const color = new THREE.Color(SHAPES[shapeIndex].color)
         const colors = colorAttr.array
+        
         for (let i = 0; i < particleCount; i++) {
             const idx = i * 3
             const variation = Math.random() * 0.1
@@ -253,167 +230,152 @@ function ParticleSystem({ particleCount = 25000 }) {
         }
         colorAttr.needsUpdate = true
         
-        // Update UI
-        const counter = document.getElementById('model-counter')
-        if (counter) {
-            counter.textContent = `Model ${currentShapeRef.current + 1} / ${SHAPES.length}: ${SHAPES[currentShapeRef.current].name}`
-        }
-        
-        // Update glow color
-        const newColor = new THREE.Color(SHAPES[currentShapeRef.current].color)
+        const newColor = new THREE.Color(SHAPES[shapeIndex].color)
         gsap.to(materialRef.current.uniforms.uGlowColor.value, {
             r: newColor.r,
             g: newColor.g,
             b: newColor.b,
-            duration: 1.0,
-            ease: "power2.inOut"
+            duration: 0.5
         })
-    }, [particleCount])
+    }, [geometry, particleCount])
     
-    // Transition handler
-    const triggerTransition = useCallback(() => {
-        if (isTransitioningRef.current) return
+    const completeTransition = useCallback(() => {
+        // Calculate next shapes
+        const nextCurrent = (currentShapeRef.current + 1) % SHAPES.length
+        const nextTarget = (nextCurrent + 1) % SHAPES.length
         
-        isTransitioningRef.current = true
+        // Update shape references
+        currentShapeRef.current = nextCurrent
         
-        // Complete the morphing to 100%
-        gsap.to(materialRef.current.uniforms.uProgress, {
-            value: 1,
-            duration: 0.6,
-            ease: "power2.inOut",
-            onComplete: () => {
-                // Complete transition and update shapes
-                completeTransition()
-                
-                // Reset progress AFTER updating shapes to prevent flicker
-                materialRef.current.uniforms.uProgress.value = 0
-                
-                // Auto-reset
-                setTimeout(() => {
-                    resetToStart()
-                }, 1000)
-            }
-        })
-    }, [completeTransition])
+        // Update uniforms for new current shape
+        materialRef.current.uniforms.uCurrentShape.value = nextCurrent
+        materialRef.current.uniforms.uTargetShape.value = nextTarget
+        materialRef.current.uniforms.uMorphProgress.value = 0
+        
+        updateColors(nextCurrent)
+        
+        const counter = document.getElementById('model-counter')
+        if (counter) {
+            counter.textContent = `Model ${nextCurrent + 1} / ${SHAPES.length}: ${SHAPES[nextCurrent].name}`
+        }
+    }, [updateColors])
     
-    // Reset function
     const resetToStart = useCallback(() => {
-        // Reset uniforms
-        gsap.to(materialRef.current.uniforms.uProgress, {
-            value: 0,
-            duration: 0.8,
-            ease: "power2.out"
-        })
+        // Instant scroll reset to prevent showing intermediate shapes
+        window.scrollTo(0, 0)
+        scrollProgressRef.current = 0
         
-        gsap.to(materialRef.current.uniforms.uScrollProgress, {
-            value: 0,
-            duration: 0.8,
-            ease: "power2.out"
-        })
-        
-        // Reset progress bar
+        // Reset progress bar instantly
         const progressBar = document.getElementById('progressBar')
         if (progressBar) {
-            gsap.to(progressBar.style, {
-                height: "0%",
-                duration: 0.8,
-                ease: "power2.out"
-            })
+            progressBar.style.height = "0%"
         }
         
-        // Smooth scroll to top
-        gsap.to(window, {
-            scrollTo: { y: 0 },
-            duration: 1.8,
-            ease: "power2.inOut",
-            onComplete: () => {
-                isTransitioningRef.current = false
-                hasTriggeredRef.current = false
-            }
-        })
+        // Refresh ScrollTrigger after instant scroll
+        ScrollTrigger.refresh()
     }, [])
     
-    // Setup ScrollTrigger once
     useEffect(() => {
-        let resetTimeout = null
-        
-        const st = ScrollTrigger.create({
+        ScrollTrigger.create({
             trigger: "body",
             start: "top top",
             end: "bottom bottom",
-            scrub: 1,
+            scrub: true,
             onUpdate: (self) => {
                 const progress = self.progress
+                scrollProgressRef.current = progress
                 
-                // Update uniforms
-                if (materialRef.current) {
-                    materialRef.current.uniforms.uScrollProgress.value = progress
-                    materialRef.current.uniforms.uProgress.value = progress
+                // Clear timeout on new scroll
+                if (scrollTimeoutRef.current) {
+                    clearTimeout(scrollTimeoutRef.current)
                 }
                 
-                // Update progress bar
+                // Subtle morphing from start, stronger at the end
+                let morphProgress
+                if (progress < 0.7) {
+                    // 0-70%: subtle morph (0 to 0.2)
+                    morphProgress = progress * 0.2 / 0.7
+                } else {
+                    // 70-100%: strong morph (0.2 to 1.0)
+                    morphProgress = 0.2 + ((progress - 0.7) / 0.3) * 0.8
+                }
+                animatedProgressRef.current = morphProgress
+                
+                if (materialRef.current) {
+                    materialRef.current.uniforms.uMorphProgress.value = morphProgress
+                }
+                
                 const progressBar = document.getElementById('progressBar')
                 if (progressBar) {
                     progressBar.style.height = `${Math.round(progress * 100)}%`
                 }
                 
-                // Trigger at 99%
-                if (progress >= 0.99 && !hasTriggeredRef.current && !isTransitioningRef.current) {
-                    hasTriggeredRef.current = true
-                    triggerTransition()
-                } else if (progress < 0.9) {
-                    hasTriggeredRef.current = false
-                }
-                
-                // Auto-reset logic
-                if (resetTimeout) clearTimeout(resetTimeout)
-                
-                if (progress > 0.02 && progress < 0.99 && !isTransitioningRef.current) {
-                    resetTimeout = setTimeout(() => {
+                if (progress >= 1.0 && !isTransitioningRef.current) {
+                    isTransitioningRef.current = true
+                    
+                    // Complete transition immediately
+                    completeTransition()
+                    
+                    // Reset scroll after brief delay to show completed transition
+                    setTimeout(() => {
                         resetToStart()
-                    }, 400)
+                        isTransitioningRef.current = false
+                    }, 500)
+                } else if (progress < 1.0 && progress > 0.02) {
+                    // Set timeout to ease back if scroll is incomplete
+                    scrollTimeoutRef.current = setTimeout(() => {
+                        // Animate both scroll and morph back to 0
+                        gsap.to(window, {
+                            scrollTo: { y: 0 },
+                            duration: 1.5,
+                            ease: "power2.inOut"
+                        })
+                        
+                        // Progress bar animation
+                        const progressBar = document.getElementById('progressBar')
+                        if (progressBar) {
+                            gsap.to(progressBar.style, {
+                                height: "0%",
+                                duration: 1.5,
+                                ease: "power2.inOut"
+                            })
+                        }
+                    }, 600) // Wait 600ms before easing back
                 }
             }
         })
         
         return () => {
-            st.kill()
-            if (resetTimeout) clearTimeout(resetTimeout)
+            ScrollTrigger.getAll().forEach(trigger => trigger.kill())
+            if (scrollTimeoutRef.current) {
+                clearTimeout(scrollTimeoutRef.current)
+            }
         }
-    }, [triggerTransition, resetToStart])
+    }, [completeTransition, resetToStart])
     
-    // Animation loop
     useFrame((_, delta) => {
         if (materialRef.current) {
             materialRef.current.uniforms.uTime.value += delta
         }
         
         if (meshRef.current) {
-            const scrollProgress = materialRef.current?.uniforms.uScrollProgress.value || 0
-            meshRef.current.rotation.y += 0.001 + scrollProgress * 0.003
+            meshRef.current.rotation.y += 0.001
         }
     })
     
     return (
         <points ref={meshRef} geometry={geometry} material={material}>
-            <primitive object={geometry} ref={geometryRef} />
+            <primitive object={geometry} />
             <primitive object={material} ref={materialRef} />
         </points>
     )
 }
 
-// UI Component (unchanged)
-function ParticleUI() {
+function ScrollMorphUI() {
     useEffect(() => {
         const style = document.createElement('style')
         style.textContent = `
-            @keyframes bounce {
-                0%, 20%, 50%, 80%, 100% { transform: translateX(-50%) translateY(0); }
-                40% { transform: translateX(-50%) translateY(-10px); }
-                60% { transform: translateX(-50%) translateY(-5px); }
-            }
-            
-            .particle-ui {
+            .scroll-morph-ui {
                 position: fixed;
                 top: 0;
                 left: 0;
@@ -442,9 +404,9 @@ function ParticleUI() {
                 left: 0;
                 width: 100%;
                 height: 0%;
-                background: linear-gradient(to top, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.3));
+                background: linear-gradient(to top, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.4));
                 border-radius: 2px;
-                transition: height 0.1s ease-out;
+                transition: height 0.05s ease-out;
             }
             
             .model-counter {
@@ -469,28 +431,32 @@ function ParticleUI() {
                 transform: translateX(-50%);
                 color: rgba(255, 255, 255, 0.7);
                 font-size: 14px;
-                animation: bounce 2s infinite;
+                text-align: center;
+                animation: float 2s ease-in-out infinite;
                 pointer-events: auto;
             }
             
-            .info-panel {
-                position: absolute;
-                top: 20px;
-                left: 20px;
-                color: rgba(255, 255, 255, 0.8);
-                font-size: 13px;
-                background: rgba(0, 0, 0, 0.6);
-                padding: 16px;
-                border-radius: 8px;
-                border: 1px solid rgba(0, 200, 255, 0.3);
-                backdrop-filter: blur(10px);
-                max-width: 280px;
+            @keyframes float {
+                0%, 100% { transform: translateX(-50%) translateY(0px); }
+                50% { transform: translateX(-50%) translateY(-10px); }
+            }
+            
+            
+            body {
+                height: 500vh;
+                overflow-y: scroll;
+                scrollbar-width: none; /* Firefox */
+                -ms-overflow-style: none; /* IE and Edge */
+            }
+            
+            body::-webkit-scrollbar {
+                display: none; /* Chrome, Safari and Opera */
             }
         `
         document.head.appendChild(style)
         
         const ui = document.createElement('div')
-        ui.className = 'particle-ui'
+        ui.className = 'scroll-morph-ui'
         ui.innerHTML = `
             <div class="progress-bar-container">
                 <div class="progress-bar" id="progressBar"></div>
@@ -501,43 +467,52 @@ function ParticleUI() {
             </div>
             
             <div class="scroll-indicator">
-                ↓ Scroll om te beginnen ↓
+                ↓ Scroll naar beneden om te morphen ↓<br>
+                <small>100% scroll = bevestig transitie</small>
             </div>
             
-            <div class="info-panel">
-                📜 Scroll naar beneden voor preview<br>
-                🎯 100% scroll = bevestig transitie<br>
-                ⚡ Auto-reset bij incomplete scroll
-            </div>
         `
         
         document.body.appendChild(ui)
         
         return () => {
             document.head.removeChild(style)
-            document.body.removeChild(ui)
+            if (document.body.contains(ui)) {
+                document.body.removeChild(ui)
+            }
         }
     }, [])
     
     return null
 }
 
-// Main component
-export default function ParticleScene({ onSceneStart }) {
+export default function ScrollMorphScene({ onSceneStart }) {
     const particleCount = useMemo(() => {
         const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
         return isMobile ? 15000 : 25000
     }, [])
     
     useEffect(() => {
+        // Reset scroll position when scene starts
+        window.scrollTo(0, 0)
+        
+        // Reset progress bar
+        const progressBar = document.getElementById('progressBar')
+        if (progressBar) {
+            progressBar.style.height = "0%"
+        }
+        
+        // Refresh ScrollTrigger
+        ScrollTrigger.refresh()
+        
         if (onSceneStart) onSceneStart()
-        console.log(`ParticleScene initialized with ${particleCount} particles`)
+        console.log(`ScrollMorphScene initialized with ${particleCount} particles`)
     }, [onSceneStart, particleCount])
     
     return (
         <>
-            <ParticleSystem particleCount={particleCount} />
-            <ParticleUI />
+            <ScrollMorphParticles particleCount={particleCount} />
+            <ScrollMorphUI />
         </>
     )
 }

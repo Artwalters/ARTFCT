@@ -3,7 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useRef, useState, useEffect } from 'react'
 import * as THREE from 'three'
 import LogoAndTerminal from './LogoAndTerminal'
-import ParticleScene from './ParticleScene'
+import ScrollMorphScene from './ScrollMorphScene'
 
 export default function Experience()
 {
@@ -14,6 +14,9 @@ export default function Experience()
     const [sceneTransition, setSceneTransition] = useState(0) // 0 to 1 for fade transition
     const targetPosition = useRef({ x: 0, y: 0, z: 15 })
     const currentPosition = useRef({ x: 0, y: 0, z: 15 })
+    
+    // Detect mobile
+    const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
     
     // Track mouse position
     useEffect(() => {
@@ -41,6 +44,11 @@ export default function Experience()
     const handleParticleSceneStart = () => {
         // Set black background
         scene.background = new THREE.Color(0x000000)
+        
+        // Reset camera position refs to let ScrollMorphScene take control
+        const baseZ = isMobile ? 12 : 10
+        currentPosition.current = { x: 0, y: 0, z: baseZ }
+        targetPosition.current = { x: 0, y: 0, z: baseZ }
     }
     
     // Smooth camera animation
@@ -74,26 +82,10 @@ export default function Experience()
             
             camera.lookAt(0, 0, 0)
         } else if (currentScene === 'particles') {
-            // Particle scene camera behavior - more dynamic
-            const influence = 1.2
-            const smoothing = 0.05
+            // Let ScrollMorphScene handle camera for particles
+            // Only apply subtle rotation based on mouse
             const rotationInfluence = 0.02
             
-            targetPosition.current.x = mousePosition.x * influence
-            targetPosition.current.y = mousePosition.y * influence * 0.8
-            targetPosition.current.z = 8 + (mousePosition.x * 0.5) // Closer to particles
-            
-            currentPosition.current.x += (targetPosition.current.x - currentPosition.current.x) * smoothing
-            currentPosition.current.y += (targetPosition.current.y - currentPosition.current.y) * smoothing
-            currentPosition.current.z += (targetPosition.current.z - currentPosition.current.z) * smoothing
-            
-            camera.position.set(
-                currentPosition.current.x,
-                currentPosition.current.y,
-                currentPosition.current.z
-            )
-            
-            // More dramatic rotation for particle scene
             camera.rotation.z = mousePosition.x * rotationInfluence
             camera.rotation.x = mousePosition.y * rotationInfluence * 0.7
             
@@ -120,7 +112,7 @@ export default function Experience()
                 <ambientLight intensity={0.3} />
                 <pointLight position={[10, 10, 10]} intensity={0.5} color="#ff6600" />
                 <pointLight position={[-10, -10, -10]} intensity={0.3} color="#ff8800" />
-                <ParticleScene onSceneStart={handleParticleSceneStart} />
+                <ScrollMorphScene onSceneStart={handleParticleSceneStart} />
             </>
         )}
 
