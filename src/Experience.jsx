@@ -3,7 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useRef, useState, useEffect } from 'react'
 import * as THREE from 'three'
 import LogoAndTerminal from './LogoAndTerminal'
-import ScrollMorphScene from './ScrollMorphScene'
+import ScrollMorphScene3D from './ScrollMorphScene3D'
 
 export default function Experience()
 {
@@ -123,7 +123,7 @@ export default function Experience()
                 <ambientLight intensity={0.3} />
                 <pointLight position={[10, 10, 10]} intensity={0.5} color="#ff6600" />
                 <pointLight position={[-10, -10, -10]} intensity={0.3} color="#ff8800" />
-                <ScrollMorphScene onSceneStart={handleParticleSceneStart} />
+                <ScrollMorphScene3D onSceneStart={handleParticleSceneStart} />
             </>
         )}
 
