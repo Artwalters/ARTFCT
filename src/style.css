@@ -2,27 +2,28 @@ html {
     margin: 0;
     padding: 0;
     background: #000;
-    /* Use 100% viewport height to prevent jumping */
-    height: 100%;
-    height: -webkit-fill-available;
+    /* Fixed viewport to prevent browser bar hiding */
+    height: 100vh;
+    height: 100dvh; /* Dynamic viewport height */
+    position: fixed;
+    width: 100%;
+    overflow: hidden;
 }
 
 body {
     margin: 0;
     padding: 0;
     background: #000;
-    height: 500vh; /* Enable scrolling */
+    /* Fixed body to match html */
+    height: 100vh;
+    height: 100dvh;
+    position: fixed;
+    width: 100%;
+    overflow: hidden;
     overscroll-behavior: none;
-    overflow-y: auto;
-    overflow-x: hidden;
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE and Edge */
     
     /* Prevent pull-to-refresh on mobile */
     overscroll-behavior-y: none;
-    
-    /* Smooth scroll for better performance */
-    -webkit-overflow-scrolling: touch;
 }
 
 /* More aggressive scrollbar hiding */
@@ -58,5 +59,47 @@ body {
     left: 0;
     width: 100%;
     height: 100vh;
+    height: 100dvh;
     background: transparent;
+    z-index: 1;
+}
+
+/* Scroll container for particle scene */
+.scroll-wrapper {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    z-index: 1000;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    display: none; /* Hidden by default */
+    /* Debug styling */
+    background: transparent;
+}
+
+/* Show when particles scene is active */
+.scroll-wrapper.active {
+    display: block;
+}
+
+/* Scrollable content */
+.scroll-content {
+    height: 500vh;
+    width: 100%;
+    /* This creates the scrollable area */
+}
+
+/* Hide scrollbar for scroll wrapper */
+.scroll-wrapper::-webkit-scrollbar {
+    display: none;
+}
+
+.scroll-wrapper {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }

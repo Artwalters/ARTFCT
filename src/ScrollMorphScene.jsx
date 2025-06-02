@@ -262,7 +262,12 @@ function ScrollMorphParticles({ particleCount = 25000 }) {
     
     const resetToStart = useCallback(() => {
         // Instant scroll reset to prevent showing intermediate shapes
-        window.scrollTo(0, 0)
+        const scrollContainer = document.getElementById('scroll-wrapper')
+        if (scrollContainer) {
+            scrollContainer.scrollTop = 0
+        } else {
+            window.scrollTo(0, 0)
+        }
         scrollProgressRef.current = 0
         
         // Reset progress bar instantly
@@ -276,12 +281,18 @@ function ScrollMorphParticles({ particleCount = 25000 }) {
     }, [])
     
     useEffect(() => {
-        ScrollTrigger.create({
-            trigger: "body",
-            start: "top top",
-            end: "bottom bottom",
-            scrub: true,
-            onUpdate: (self) => {
+        // Wait a bit for the container to be ready
+        const initScrollTrigger = () => {
+            const scrollContainer = document.getElementById('scroll-wrapper')
+            console.log('Initializing ScrollTrigger with container:', scrollContainer)
+            
+            ScrollTrigger.create({
+                trigger: scrollContainer ? ".scroll-content" : "body",
+                start: "top top",
+                end: "bottom bottom",
+                scrub: true,
+                scroller: scrollContainer || undefined,
+                onUpdate: (self) => {
                 const progress = self.progress
                 scrollProgressRef.current = progress
                 
@@ -325,7 +336,8 @@ function ScrollMorphParticles({ particleCount = 25000 }) {
                     // Set timeout to ease back if scroll is incomplete
                     scrollTimeoutRef.current = setTimeout(() => {
                         // Animate both scroll and morph back to 0
-                        gsap.to(window, {
+                        const scrollContainer = document.getElementById('scroll-wrapper')
+                        gsap.to(scrollContainer || window, {
                             scrollTo: { y: 0 },
                             duration: 1.5,
                             ease: "power2.inOut"
@@ -344,6 +356,10 @@ function ScrollMorphParticles({ particleCount = 25000 }) {
                 }
             }
         })
+        }
+        
+        // Initialize after a short delay to ensure container is ready
+        setTimeout(initScrollTrigger, 100)
         
         return () => {
             ScrollTrigger.getAll().forEach(trigger => trigger.kill())
@@ -506,7 +522,12 @@ export default function ScrollMorphScene({ onSceneStart }) {
     
     useEffect(() => {
         // Reset scroll position when scene starts
-        window.scrollTo(0, 0)
+        const scrollContainer = document.getElementById('scroll-wrapper')
+        if (scrollContainer) {
+            scrollContainer.scrollTop = 0
+        } else {
+            window.scrollTo(0, 0)
+        }
         
         // Reset progress bar
         const progressBar = document.getElementById('progressBar')

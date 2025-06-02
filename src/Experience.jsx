@@ -49,6 +49,17 @@ export default function Experience()
         const baseZ = isMobile ? 12 : 10
         currentPosition.current = { x: 0, y: 0, z: baseZ }
         targetPosition.current = { x: 0, y: 0, z: baseZ }
+        
+        // Enable scroll container
+        setTimeout(() => {
+            const scrollWrapper = document.getElementById('scroll-wrapper')
+            if (scrollWrapper) {
+                scrollWrapper.classList.add('active')
+                console.log('Scroll container activated')
+            } else {
+                console.error('Scroll container not found!')
+            }
+        }, 50)
     }
     
     // Smooth camera animation
