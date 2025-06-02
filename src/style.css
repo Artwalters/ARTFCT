@@ -1,33 +1,54 @@
-html,
-body
-{
+html {
     margin: 0;
     padding: 0;
     background: #000;
+    /* Use 100% viewport height to prevent jumping */
+    height: 100%;
+    height: -webkit-fill-available;
 }
 
 body {
+    margin: 0;
+    padding: 0;
+    background: #000;
     height: 500vh; /* Enable scrolling */
     overscroll-behavior: none;
-    overflow-y: scroll;
+    overflow-y: auto;
+    overflow-x: hidden;
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE and Edge */
-}
-
-/* Hide scrollbar for Chrome, Safari and Opera */
-body::-webkit-scrollbar {
-    display: none;
-    width: 0;
-    height: 0;
-}
-
-/* Extra Safari-specific hiding */
-body {
+    
+    /* Prevent pull-to-refresh on mobile */
+    overscroll-behavior-y: none;
+    
+    /* Smooth scroll for better performance */
     -webkit-overflow-scrolling: touch;
 }
 
-::-webkit-scrollbar {
-    display: none;
+/* More aggressive scrollbar hiding */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+}
+
+/* Safari iOS specific */
+body {
+    -webkit-overflow-scrolling: touch;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+}
+
+/* Global scrollbar hiding */
+*::-webkit-scrollbar {
+    display: none !important;
+}
+
+* {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
 }
 
 #root

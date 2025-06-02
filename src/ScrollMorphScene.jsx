@@ -373,6 +373,16 @@ function ScrollMorphParticles({ particleCount = 25000 }) {
 
 function ScrollMorphUI() {
     useEffect(() => {
+        // Handle viewport height changes on mobile
+        const setVH = () => {
+            const vh = window.innerHeight * 0.01
+            document.documentElement.style.setProperty('--vh', `${vh}px`)
+        }
+        
+        setVH()
+        window.addEventListener('resize', setVH)
+        window.addEventListener('orientationchange', setVH)
+        
         const style = document.createElement('style')
         style.textContent = `
             .scroll-morph-ui {
@@ -480,6 +490,8 @@ function ScrollMorphUI() {
             if (document.body.contains(ui)) {
                 document.body.removeChild(ui)
             }
+            window.removeEventListener('resize', setVH)
+            window.removeEventListener('orientationchange', setVH)
         }
     }, [])
     
