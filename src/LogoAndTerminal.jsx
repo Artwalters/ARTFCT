@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
+import { AdditiveBlending } from 'three'
 
 export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplete }) {
     const { raycaster, mouse, camera } = useThree()
@@ -197,26 +198,14 @@ export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplet
             if (!terminalActive) {
                 setTerminalActive(true)
             }
-            
-            // Always focus hidden input on mobile when terminal is active
-            if (isMobile && terminalActive) {
-                const hiddenInput = document.getElementById('mobile-input')
-                if (hiddenInput) {
-                    hiddenInput.focus()
-                }
-            }
+            // Removed mobile input focus - no keyboard on mobile
         }
         
         const handleTouch = () => {
             if (!terminalActive) {
                 setTerminalActive(true)
             }
-            
-            // Focus hidden input on touch to trigger virtual keyboard
-            const hiddenInput = document.getElementById('mobile-input')
-            if (hiddenInput) {
-                setTimeout(() => hiddenInput.focus(), 100)
-            }
+            // Removed mobile input focus - no keyboard on mobile
         }
         
         window.addEventListener('click', handleClick)
@@ -346,21 +335,13 @@ export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplet
             }
         }
         
-        // Add event listeners
+        // Add event listeners - desktop only
         window.addEventListener('keydown', handleKeyPress)
         
-        const mobileInput = document.getElementById('mobile-input')
-        if (mobileInput) {
-            mobileInput.addEventListener('input', handleMobileInput)
-            mobileInput.addEventListener('keydown', handleMobileEnter)
-        }
+        // Mobile input disabled - no keyboard on mobile
         
         return () => {
             window.removeEventListener('keydown', handleKeyPress)
-            if (mobileInput) {
-                mobileInput.removeEventListener('input', handleMobileInput)
-                mobileInput.removeEventListener('keydown', handleMobileEnter)
-            }
         }
     }, [currentCommand, terminalContent, terminalActive, typingContent, terminalTypingComplete, portfolioShown, handleEnterPress])
     
@@ -444,7 +425,7 @@ export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplet
         
         // Draw terminal border (always visible)
         ctx.strokeStyle = '#ffffff'
-        ctx.lineWidth = 1
+        ctx.lineWidth = 2
         ctx.strokeRect(borderX, borderY, borderWidth, borderHeight)
         
         
@@ -456,7 +437,7 @@ export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplet
         
         // Social media links and date (always visible)
         ctx.fillStyle = '#888888'
-        ctx.font = `${headerFontSize}px "Courier New", Courier, monospace`
+        ctx.font = `bold ${headerFontSize}px "Courier New", Courier, monospace`
         ctx.textAlign = 'left'
         ctx.textBaseline = 'middle'
         const socialY = borderY + headerHeight / 2
@@ -557,7 +538,7 @@ export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplet
         const visibleLinesContent = Math.floor(contentAreaHeight / lineHeight)
         maxVisibleLines.current = Math.max(10, visibleLinesContent) // Ensure minimum lines
         
-        ctx.font = `${fontSize}px "Courier New", Courier, monospace`
+        ctx.font = `bold ${fontSize}px "Courier New", Courier, monospace`
         
         // Render all content in scrollable area
         ctx.save()
@@ -782,7 +763,7 @@ export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplet
         }
         
         // Apply wrapping to content
-        const regularFont = `${fontSize}px "Courier New", Courier, monospace`
+        const regularFont = `bold ${fontSize}px "Courier New", Courier, monospace`
         const wrappedWelcomeMessages = wrapLinesIfNeeded(displayWelcomeMessages, regularFont)
         const wrappedDisplayContent = wrapLinesIfNeeded(displayContent, regularFont)
         
@@ -845,25 +826,25 @@ export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplet
             
             // Check if this is a logo line
             if (i < displayLogoLines.length) {
-                ctx.fillStyle = '#ff8c69' // Orange/peach for logo
-                ctx.font = `${logoFontSize}px "Courier New", Courier, monospace` // Smaller logo
+                ctx.fillStyle = '#ff5722' // Bright vibrant orange for logo
+                ctx.font = `bold ${logoFontSize}px "Courier New", Courier, monospace` // Smaller logo
                 ctx.fillText(line, startX, currentY)
-                ctx.font = `${fontSize}px "Courier New", Courier, monospace`
+                ctx.font = `bold ${fontSize}px "Courier New", Courier, monospace`
                 currentY += logoLineHeight // Use logo line height
             } else if (line.startsWith('>')) {
-                ctx.fillStyle = '#9cdcfe' // Light blue for prompt (VS Code style)
+                ctx.fillStyle = '#00e5ff' // Bright cyan for prompt
                 ctx.fillText('> ', startX + 10, currentY)
                 
                 if (isInputLine) {
                     // This is the input line - handle cursor and typing
                     const inputText = line.substring(2)
                     if (terminalActive) {
-                        ctx.fillStyle = '#d4d4d4' // Light gray for user input
+                        ctx.fillStyle = '#ffffff' // Pure white for user input
                         ctx.fillText(currentCommand, startX + 30, currentY)
                         
                         if (cursorVisible) {
                             const cursorX = startX + 30 + ctx.measureText(currentCommand).width
-                            ctx.fillStyle = '#9cdcfe' // Light blue cursor
+                            ctx.fillStyle = '#00ff00' // Bright green cursor
                             ctx.fillText('_', cursorX, currentY)
                         }
                     } else {
@@ -871,20 +852,20 @@ export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplet
                         ctx.fillText('Click to start typing...', startX + 30, currentY)
                     }
                 } else {
-                    ctx.fillStyle = '#d4d4d4' // Light gray for user input
+                    ctx.fillStyle = '#ffffff' // Pure white for user input
                     ctx.fillText(line.substring(2), startX + 30, currentY)
                 }
                 currentY += lineHeight // Normal line height
             } else if (line.includes('not found')) {
-                ctx.fillStyle = '#f44747' // Red for errors
+                ctx.fillStyle = '#ff0040' // Bright red for errors
                 ctx.fillText(line, startX + 10, currentY)
                 currentY += lineHeight
             } else if (line.includes('Available commands:') || line.includes('Technical Skills:') || line.includes('Recent Projects:') || line.includes('Contact Information:')) {
-                ctx.fillStyle = '#dcdcaa' // Yellow/gold for headers
+                ctx.fillStyle = '#ffeb3b' // Bright yellow for headers
                 ctx.fillText(line, startX + 10, currentY)
                 currentY += lineHeight
             } else if (line.includes('Email:') || line.includes('GitHub:') || line.includes('Frontend:') || line.includes('Backend:') || line.includes('DevOps:')) {
-                ctx.fillStyle = '#4ec9b0' // Teal for labels
+                ctx.fillStyle = '#00ffcc' // Bright teal for labels
                 ctx.fillText(line, startX + 10, currentY)
                 currentY += lineHeight
             } else if (line === '[ ENTER TO PORTFOLIO ]') {
@@ -904,7 +885,7 @@ export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplet
                         }
                         
                         // Draw text with smooth bracket animation at same position
-                        ctx.fillStyle = '#ff8c69'
+                        ctx.fillStyle = '#ff5722' // Same bright orange as logo
                         
                         // Smooth animation for brackets
                         const spaces = Math.floor(bracketAnimationRef.current * 2)
@@ -917,7 +898,7 @@ export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplet
                         currentY += lineHeight
                     } else {
                         // During typing animation, just show the text - no bold
-                        ctx.fillStyle = '#ff8c69'
+                        ctx.fillStyle = '#ff5722' // Same bright orange
                         ctx.fillText(buttonDisplayText, startX, currentY)
                         currentY += lineHeight
                     }
@@ -926,7 +907,7 @@ export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplet
                     currentY += lineHeight
                 }
             } else {
-                ctx.fillStyle = '#d4d4d4' // Light gray for normal text
+                ctx.fillStyle = '#e0e0e0' // Bright white-gray for normal text
                 ctx.fillText(line, startX + 10, currentY)
                 currentY += lineHeight
             }
@@ -940,10 +921,10 @@ export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplet
         if (totalLines > visibleLinesContent) {
             // Text indicator (original)
             ctx.fillStyle = '#444444'
-            ctx.font = '12px "Courier New", Courier, monospace'
+            ctx.font = 'bold 12px "Courier New", Courier, monospace'
             const scrollText = scrollOffset > 0 ? `[${scrollOffset} lines above]` : '[Scroll up to see history]'
             ctx.fillText(scrollText, borderX + borderWidth - 200, actualContentStartY - 10)
-            ctx.font = `${fontSize}px "Courier New", Courier, monospace`
+            ctx.font = `bold ${fontSize}px "Courier New", Courier, monospace`
             
             // Tiny scrollbar as additional visual aid
             const scrollbarX = borderX + borderWidth - 8
@@ -1018,50 +999,55 @@ export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplet
         // Animate background layers with more intense RGB split effect
         if (backgroundBlueRef.current) {
             // Blue layer moves more dramatically
-            backgroundBlueRef.current.position.x = mousePosition.x * 0.15
-            backgroundBlueRef.current.position.y = mousePosition.y * 0.1
+            backgroundBlueRef.current.position.x = mousePosition.x * 0.25
+            backgroundBlueRef.current.position.y = mousePosition.y * 0.15
         }
         
         if (backgroundRedRef.current) {
             // Red layer moves opposite direction with more offset
-            backgroundRedRef.current.position.x = -mousePosition.x * 0.12
-            backgroundRedRef.current.position.y = -mousePosition.y * 0.08
+            backgroundRedRef.current.position.x = -mousePosition.x * 0.2
+            backgroundRedRef.current.position.y = -mousePosition.y * 0.12
         }
     })
     
     // Calculate responsive plane size
-    const planeWidth = (canvasSize.width / 1200) * 15
-    const planeHeight = (canvasSize.height / 800) * 12
+    const isMobile = window.innerWidth <= 480
+    const mobileSizeMultiplier = 1.35 // 35% bigger on mobile
+    const mobileWidthMultiplier = 1.55 // 55% wider on mobile (35% + 10% + 10% extra)
+    const planeWidth = (canvasSize.width / 1200) * 15 * (isMobile ? mobileWidthMultiplier : 1)
+    const planeHeight = (canvasSize.height / 800) * 12 * (isMobile ? mobileSizeMultiplier : 1)
     
     return (
         <group>
             {/* Red background layer - furthest back */}
             <mesh 
                 ref={backgroundRedRef}
-                position={[-0.03, 0.02, -0.3]}
+                position={[-0.05, 0.03, -0.3]}
             >
                 <planeGeometry args={[planeWidth, planeHeight]} />
                 <meshBasicMaterial 
                     map={texture} 
                     transparent 
                     alphaTest={0.1}
-                    color="#cc6666"
-                    opacity={0.25}
+                    color="#ff0000"
+                    opacity={0.6}
+                    blending={AdditiveBlending}
                 />
             </mesh>
             
             {/* Blue background layer - middle depth */}
             <mesh 
                 ref={backgroundBlueRef}
-                position={[0.02, -0.01, -0.2]}
+                position={[0.04, -0.02, -0.2]}
             >
                 <planeGeometry args={[planeWidth, planeHeight]} />
                 <meshBasicMaterial 
                     map={texture} 
                     transparent 
                     alphaTest={0.1}
-                    color="#6699cc"
-                    opacity={0.3}
+                    color="#0080ff"
+                    opacity={0.6}
+                    blending={AdditiveBlending}
                 />
             </mesh>
             

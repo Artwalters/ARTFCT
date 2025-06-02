@@ -264,7 +264,13 @@ function ScrollMorphParticles({ particleCount = 25000 }) {
         // Instant scroll reset to prevent showing intermediate shapes
         const scrollContainer = document.getElementById('scroll-wrapper')
         if (scrollContainer) {
+            // Temporarily disable scrolling to stop momentum
+            scrollContainer.style.overflow = 'hidden'
             scrollContainer.scrollTop = 0
+            // Re-enable scrolling after a brief moment
+            setTimeout(() => {
+                scrollContainer.style.overflow = 'auto'
+            }, 100)
         } else {
             window.scrollTo(0, 0)
         }
@@ -327,11 +333,14 @@ function ScrollMorphParticles({ particleCount = 25000 }) {
                     // Complete transition immediately
                     completeTransition()
                     
-                    // Reset scroll after brief delay to show completed transition
+                    // Reset scroll after longer delay to prevent skipping
                     setTimeout(() => {
                         resetToStart()
-                        isTransitioningRef.current = false
-                    }, 500)
+                        // Add extra delay before allowing new transitions
+                        setTimeout(() => {
+                            isTransitioningRef.current = false
+                        }, 500) // Extra buffer time
+                    }, 800) // Increased from 500ms
                 } else if (progress < 1.0 && progress > 0.02) {
                     // Set timeout to ease back if scroll is incomplete
                     scrollTimeoutRef.current = setTimeout(() => {

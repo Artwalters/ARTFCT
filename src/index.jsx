@@ -10,7 +10,7 @@ root.render(
         <Canvas
             shadows
             camera={ {
-                fov: 55,
+                fov: 60,
                 near: 0.2,
                 far: 100,
                 position: [ 0, 0, 15 ]
