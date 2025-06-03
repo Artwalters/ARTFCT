@@ -20,7 +20,10 @@ const CODE_CHARACTERS = [
 ]
 
 // Creëer texture atlas met alle karakters
+// Voeg timestamp toe om cache te omzeilen
+const atlasVersion = Date.now()
 function createCharacterAtlas() {
+    console.log('Creating character atlas with VS Code colors, version:', atlasVersion)
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')
     const charSize = 64
@@ -38,17 +41,74 @@ function createCharacterAtlas() {
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     
+    // VS Code Dark+ theme kleuren met meer variatie
+    const getVSCodeColor = (char) => {
+        // Brackets - verschillende tinten geel/goud
+        if ('[]'.includes(char)) return '#FFD700'
+        if ('{}'.includes(char)) return '#FFA500' // oranje-geel
+        if ('()'.includes(char)) return '#DA70D6' // paars
+        if ('<>'.includes(char)) return '#808080' // grijs
+        
+        // Operators - verschillende blauwtinten
+        if ('+-'.includes(char)) return '#569CD6' // standaard blauw
+        if ('*/'.includes(char)) return '#4EC9B0' // turquoise
+        if ('%='.includes(char)) return '#4FC1FF' // licht blauw
+        if ('&|'.includes(char)) return '#C586C0' // paars
+        if ('!~^'.includes(char)) return '#FF6B6B' // rood
+        
+        // Punctuation - verschillende grijstinten
+        if (':'.includes(char)) return '#FFFFFF' // wit
+        if (';'.includes(char)) return '#D4D4D4' // licht grijs
+        if (',.'.includes(char)) return '#808080' // grijs
+        if ('_'.includes(char)) return '#9CDCFE' // lichtblauw
+        
+        // Special characters - warme kleuren
+        if ('@'.includes(char)) return '#DCDCAA' // geel
+        if ('#'.includes(char)) return '#608B4E' // groen (comments)
+        if ('$'.includes(char)) return '#9CDCFE' // lichtblauw (variables)
+        
+        // Quotes - string kleuren
+        if ('"'.includes(char)) return '#CE9178' // oranje
+        if ("'".includes(char)) return '#D7BA7D' // licht oranje
+        if ('`'.includes(char)) return '#CE9178' // oranje
+        
+        // Numbers - groentinten
+        if ('0123'.includes(char)) return '#B5CEA8' // lichtgroen
+        if ('4567'.includes(char)) return '#96D896' // groen
+        if ('89'.includes(char)) return '#7ECA7E' // donkergroen
+        
+        // Letters - meer variatie
+        const letterColors = [
+            '#9CDCFE', // lichtblauw (variables)
+            '#C586C0', // paars (keywords)
+            '#DCDCAA', // geel (functions)
+            '#4EC9B0', // turquoise (types)
+            '#CE9178', // oranje
+            '#D7BA7D', // licht oranje
+        ]
+        
+        if ('abcdefghijklmnopqrstuvwxyz'.includes(char.toLowerCase())) {
+            // Hash de character code voor consistente maar gevarieerde kleuren
+            const index = char.charCodeAt(0) % letterColors.length
+            return letterColors[index]
+        }
+        
+        // Default - wit
+        return '#D4D4D4'
+    }
+    
     CODE_CHARACTERS.forEach((char, i) => {
         const col = i % cols
         const row = Math.floor(i / cols)
         const x = col * charSize + charSize / 2
         const y = row * charSize + charSize / 2
         
-        // Groene kleur zoals in Matrix
-        ctx.fillStyle = '#00ff00'
+        // VS Code kleur voor dit karakter
+        const color = getVSCodeColor(char)
+        ctx.fillStyle = color
         
         // Teken karakter met glow effect
-        ctx.shadowColor = '#00ff00'
+        ctx.shadowColor = color
         ctx.shadowBlur = 10
         ctx.fillText(char, x, y)
         
@@ -64,7 +124,10 @@ function createCharacterAtlas() {
     texture.magFilter = THREE.LinearFilter
     texture.needsUpdate = true
     
-    // Debug: toon de texture
+    // Debug: toon de texture - verwijder oude canvas eerst
+    const oldCanvas = document.querySelector('canvas[style*="fixed"]')
+    if (oldCanvas) oldCanvas.remove()
+    
     canvas.style.position = 'fixed'
     canvas.style.top = '10px'
     canvas.style.right = '10px'
@@ -94,6 +157,7 @@ const vertexShader = `
     varying vec3 vColor;
     varying float vRandom;
     varying float vCharIndex;
+    varying vec3 vWorldPosition;
     
     vec3 getModelPosition(int modelIndex, vec3 pos0, vec3 pos1, vec3 pos2, vec3 pos3) {
         if (modelIndex == 0) return pos0;
@@ -112,6 +176,9 @@ const vertexShader = `
         
         vec3 morphedPosition = mix(currentPos, targetPos, uMorphProgress);
         
+        // Stuur world position door naar fragment shader
+        vWorldPosition = morphedPosition;
+        
         // Subtiele beweging voor levendigheid
         float timeOffset = uTime + aRandom * 6.28318;
         morphedPosition.x += sin(timeOffset * 0.5) * 0.05;
@@ -119,8 +186,23 @@ const vertexShader = `
         
         vec4 mvPosition = modelViewMatrix * vec4(morphedPosition, 1.0);
         
-        // Kleine grootte voor individuele karakters
-        float size = 1.0;
+        // Variabele grootte gebaseerd op random en positie
+        float baseSize = 0.5;
+        
+        // Maak particles in het centrum groter
+        float centerBoost = 1.0 - smoothstep(0.0, 5.0, length(morphedPosition.xy));
+        
+        // Random variatie in grootte (0.5 tot 1.5x)
+        float sizeVariation = 0.5 + aRandom;
+        
+        // Combineer alles
+        float size = baseSize * sizeVariation * (1.0 + centerBoost * 0.5);
+        
+        // Optioneel: maak border particles ook groter
+        if (length(morphedPosition) > 5.5) {
+            size *= 1.5;
+        }
+        
         gl_PointSize = size * (200.0 / -mvPosition.z);
         
         gl_Position = projectionMatrix * mvPosition;
@@ -137,6 +219,7 @@ const fragmentShader = `
     varying vec3 vColor;
     varying float vRandom;
     varying float vCharIndex;
+    varying vec3 vWorldPosition;
     
     void main() {
         // Bereken welk karakter we moeten tonen
@@ -156,10 +239,40 @@ const fragmentShader = `
             discard;
         }
         
-        // Individuele flicker per particle
-        float flicker1 = sin(uTime * 3.0 + vRandom * 17.3) * 0.5 + 0.5;
-        float flicker2 = sin(uTime * 7.0 + vRandom * 23.7) * 0.5 + 0.5;
-        float flicker3 = sin(uTime * 11.0 + vRandom * 31.4) * 0.5 + 0.5;
+        // Bereken verschillende afstanden voor zone kleuring
+        float distFromCenter = length(vWorldPosition.xy);
+        float distFromCenterY = abs(vWorldPosition.y);
+        float distFromCenterX = abs(vWorldPosition.x);
+        
+        // Simpele border detectie - alleen de buitenste particles wit maken
+        vec3 zoneColor;
+        
+        // Detecteer alleen de echte buitenste rand
+        // We gebruiken een veel hogere threshold zodat alleen de uiterste particles wit worden
+        float maxDist = max(max(abs(vWorldPosition.x), abs(vWorldPosition.y)), abs(vWorldPosition.z));
+        float borderThreshold = 5.5; // Verhoog dit voor alleen de allerlaatste rand
+        
+        // Ook check de radiale afstand voor ronde vormen
+        float radialDist = length(vWorldPosition);
+        float radialThreshold = 6.0;
+        
+        // Check of deze particle echt aan de uiterste rand is
+        if (maxDist > borderThreshold || radialDist > radialThreshold) {
+            // Alleen de allerlaatste border particles - maak ze wit
+            zoneColor = vec3(1.0, 1.0, 1.0);
+        } else {
+            // Alle andere particles - gebruik normale VS Code kleuren
+            zoneColor = charColor.rgb;
+        }
+        
+        // Individuele flicker per particle met meer randomisatie
+        float randomSpeed1 = 1.0 + vRandom * 4.0; // Random snelheid tussen 1-5
+        float randomSpeed2 = 2.0 + mod(vRandom * 7.0, 5.0); // Random snelheid tussen 2-7
+        float randomSpeed3 = 3.0 + mod(vRandom * 11.0, 8.0); // Random snelheid tussen 3-11
+        
+        float flicker1 = sin(uTime * randomSpeed1 + vRandom * 17.3) * 0.5 + 0.5;
+        float flicker2 = sin(uTime * randomSpeed2 + vRandom * 23.7) * 0.5 + 0.5;
+        float flicker3 = sin(uTime * randomSpeed3 + vRandom * 31.4) * 0.5 + 0.5;
         
         // Combineer verschillende flicker frequenties
         float combinedFlicker = flicker1 * 0.3 + flicker2 * 0.3 + flicker3 * 0.4;
@@ -167,14 +280,15 @@ const fragmentShader = `
         // Zorg dat het flikkeren subtiel is (tussen 0.7 en 1.0)
         float flickerAmount = 0.7 + combinedFlicker * 0.3;
         
-        // Occasionele sterke flicker
-        float strongFlicker = step(0.98, sin(uTime * 2.0 + vRandom * 100.0));
+        // Occasionele sterke flicker - ook meer random
+        float randomThreshold = 0.95 + vRandom * 0.04; // Verschillende thresholds per particle
+        float strongFlicker = step(randomThreshold, sin(uTime * (1.5 + vRandom * 2.0) + vRandom * 100.0));
         flickerAmount = mix(flickerAmount, 0.3, strongFlicker);
         
-        // Gebruik de karakter kleur met vColor tint
-        vec3 finalColor = charColor.rgb * vColor;
+        // Final color
+        vec3 finalColor = zoneColor * flickerAmount;
         
-        // Extra glow
+        // Normale glow voor alle particles
         finalColor *= 1.2;
         
         gl_FragColor = vec4(finalColor, charColor.a * flickerAmount);
@@ -541,14 +655,14 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
         }
         geo.setAttribute('aCharIndex', new THREE.BufferAttribute(charIndices, 1))
         
-        // Colors - Matrix groene tinten
+        // Colors - wit/neutraal zodat texture kleuren goed zichtbaar zijn
         const colors = new Float32Array(particleCount * 3)
         for (let i = 0; i < particleCount; i++) {
             const idx = i * 3
-            const brightness = 0.5 + Math.random() * 0.5
-            colors[idx] = brightness * 0.1     // Beetje rood
-            colors[idx + 1] = brightness       // Veel groen
-            colors[idx + 2] = brightness * 0.3 // Beetje blauw
+            // Licht grijze tint voor alle particles
+            colors[idx] = 0.9     // R
+            colors[idx + 1] = 0.9 // G
+            colors[idx + 2] = 0.9 // B
         }
         geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
         
@@ -874,7 +988,7 @@ MODELS.forEach(model => {
 export default function ScrollMorphScene3D({ onSceneStart }) {
     const particleCount = useMemo(() => {
         const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
-        return isMobile ? 500 : 1000 // Veel minder particles
+        return isMobile ? 2500 : 5000 // 1.25x meer particles
     }, [])
     
     useEffect(() => {
