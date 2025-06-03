@@ -510,11 +510,15 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
     const isHoldingRef = useRef(false)
     const holdTimeoutRef = useRef(null)
     const circleMorphTweenRef = useRef(null)
+    const menuActiveRef = useRef(false)
+    const selectedModelRef = useRef(0)
+    const isDraggingRef = useRef(false)
     
     // Mouse movement tracking
     const mouseRef = useRef({ x: 0, y: 0 })
     const targetRotationRef = useRef({ x: 0, y: 0 })
     const currentRotationRef = useRef({ x: 0, y: 0 })
+    const dragStartPos = useRef({ x: 0, y: 0 })
     
     // Detect mobile for camera distance
     const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
@@ -856,56 +860,66 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
         }
     }, [modelsLoaded, completeTransition, resetToStart])
     
-    // Long hold event handlers
-    const handlePointerDown = useCallback(() => {
-        if (!materialRef.current) return
+    // Show menu function
+    const showMenu = useCallback(() => {
+        const menu = document.getElementById('model-menu')
+        if (!menu) return
         
-        isHoldingRef.current = true
+        menuActiveRef.current = true
+        menu.classList.add('active')
         
-        // Start timer for 1 second
-        holdTimeoutRef.current = setTimeout(() => {
-            if (isHoldingRef.current) {
-                console.log('Long hold detected - morphing to circle')
-                
-                // Kill any existing tween
-                if (circleMorphTweenRef.current) {
-                    circleMorphTweenRef.current.kill()
-                }
-                
-                // Animate to circle
-                circleMorphTweenRef.current = gsap.to(materialRef.current.uniforms.uCircleMorphProgress, {
-                    value: 1,
-                    duration: 0.8,
-                    ease: "power2.inOut",
-                    onUpdate: () => {
-                        console.log('Circle morph progress:', materialRef.current.uniforms.uCircleMorphProgress.value)
-                    }
-                })
-            }
-        }, 1000) // 1 second hold
-    }, [])
-    
-    const handlePointerUp = useCallback(() => {
-        if (!materialRef.current) return
+        // Update selected model indicator
+        const options = menu.querySelectorAll('.model-option')
+        options.forEach((option, index) => {
+            option.classList.toggle('selected', index === currentModelRef.current)
+        })
         
-        isHoldingRef.current = false
+        // GSAP animation to show menu
+        gsap.to(menu, {
+            opacity: 1,
+            scale: 1,
+            duration: 0.4,
+            ease: "back.out(1.7)"
+        })
         
-        // Clear timeout if still waiting
-        if (holdTimeoutRef.current) {
-            clearTimeout(holdTimeoutRef.current)
-            holdTimeoutRef.current = null
-        }
-        
-        // If circle is active, animate back
-        if (materialRef.current.uniforms.uCircleMorphProgress.value > 0) {
-            console.log('Releasing - morphing back from circle')
-            
-            // Kill any existing tween
+        // Morph to sphere
+        if (materialRef.current) {
             if (circleMorphTweenRef.current) {
                 circleMorphTweenRef.current.kill()
             }
             
-            // Animate back to original
+            circleMorphTweenRef.current = gsap.to(materialRef.current.uniforms.uCircleMorphProgress, {
+                value: 1,
+                duration: 0.8,
+                ease: "power2.inOut"
+            })
+        }
+    }, [])
+    
+    // Hide menu function
+    const hideMenu = useCallback(() => {
+        const menu = document.getElementById('model-menu')
+        if (!menu) return
+        
+        menuActiveRef.current = false
+        
+        // GSAP animation to hide menu
+        gsap.to(menu, {
+            opacity: 0,
+            scale: 0,
+            duration: 0.3,
+            ease: "power2.in",
+            onComplete: () => {
+                menu.classList.remove('active')
+            }
+        })
+        
+        // Morph back to selected model
+        if (materialRef.current) {
+            if (circleMorphTweenRef.current) {
+                circleMorphTweenRef.current.kill()
+            }
+            
             circleMorphTweenRef.current = gsap.to(materialRef.current.uniforms.uCircleMorphProgress, {
                 value: 0,
                 duration: 0.6,
@@ -913,6 +927,118 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
             })
         }
     }, [])
+    
+    // Long hold event handlers
+    const handlePointerDown = useCallback((e) => {
+        if (!materialRef.current) return
+        
+        isHoldingRef.current = true
+        dragStartPos.current = { x: e.clientX || e.touches?.[0]?.clientX || 0, y: e.clientY || e.touches?.[0]?.clientY || 0 }
+        
+        // Start timer for 1 second
+        holdTimeoutRef.current = setTimeout(() => {
+            if (isHoldingRef.current && !isDraggingRef.current) {
+                console.log('Long hold detected - showing menu')
+                showMenu()
+            }
+        }, 1000) // 1 second hold
+    }, [showMenu])
+    
+    const handlePointerMove = useCallback((e) => {
+        if (!isHoldingRef.current) return
+        
+        const currentPos = { 
+            x: e.clientX || e.touches?.[0]?.clientX || 0, 
+            y: e.clientY || e.touches?.[0]?.clientY || 0 
+        }
+        
+        const distance = Math.sqrt(
+            Math.pow(currentPos.x - dragStartPos.current.x, 2) + 
+            Math.pow(currentPos.y - dragStartPos.current.y, 2)
+        )
+        
+        // If moved more than 10px, consider it a drag
+        if (distance > 10) {
+            isDraggingRef.current = true
+            
+            // Clear hold timeout
+            if (holdTimeoutRef.current) {
+                clearTimeout(holdTimeoutRef.current)
+                holdTimeoutRef.current = null
+            }
+        }
+        
+        // Handle drag over menu options
+        if (menuActiveRef.current) {
+            const menu = document.getElementById('model-menu')
+            const options = menu?.querySelectorAll('.model-option')
+            
+            options?.forEach(option => {
+                const rect = option.getBoundingClientRect()
+                const isOver = currentPos.x >= rect.left && 
+                               currentPos.x <= rect.right && 
+                               currentPos.y >= rect.top && 
+                               currentPos.y <= rect.bottom
+                
+                option.classList.toggle('drag-over', isOver)
+            })
+        }
+    }, [])
+    
+    const handlePointerUp = useCallback(() => {
+        if (!materialRef.current) return
+        
+        isHoldingRef.current = false
+        isDraggingRef.current = false
+        
+        // Clear timeout if still waiting
+        if (holdTimeoutRef.current) {
+            clearTimeout(holdTimeoutRef.current)
+            holdTimeoutRef.current = null
+        }
+        
+        // If menu is active, handle selection and hide menu
+        if (menuActiveRef.current) {
+            // Check if mouse is over a model option
+            const menu = document.getElementById('model-menu')
+            const options = menu?.querySelectorAll('.model-option')
+            let selectedIndex = -1
+            
+            options?.forEach((option, index) => {
+                if (option.classList.contains('drag-over')) {
+                    selectedIndex = parseInt(option.dataset.model)
+                    option.classList.remove('drag-over')
+                }
+            })
+            
+            // If a model was selected, switch to it
+            if (selectedIndex >= 0 && selectedIndex !== currentModelRef.current) {
+                console.log('Switching to model:', selectedIndex, MODELS[selectedIndex].name)
+                
+                // Update current model
+                const oldModel = currentModelRef.current
+                currentModelRef.current = selectedIndex
+                
+                // Update material uniforms
+                if (materialRef.current) {
+                    materialRef.current.uniforms.uCurrentModel.value = selectedIndex
+                    materialRef.current.uniforms.uTargetModel.value = (selectedIndex + 1) % MODELS.length
+                    materialRef.current.uniforms.uMorphProgress.value = 0
+                }
+                
+                // Update colors
+                updateColors(selectedIndex)
+                
+                // Update counter
+                const counter = document.getElementById('model-counter')
+                if (counter) {
+                    counter.textContent = `Model ${selectedIndex + 1} / ${MODELS.length}: ${MODELS[selectedIndex].name}`
+                }
+            }
+            
+            hideMenu()
+        }
+    }, [hideMenu])
     
     // Mouse movement tracking
     useEffect(() => {
@@ -942,17 +1068,21 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
         window.addEventListener('mousedown', handlePointerDown)
         window.addEventListener('mouseup', handlePointerUp)
         window.addEventListener('mouseleave', handlePointerUp)
+        window.addEventListener('mousemove', handlePointerMove)
         window.addEventListener('touchstart', handlePointerDown)
         window.addEventListener('touchend', handlePointerUp)
         window.addEventListener('touchcancel', handlePointerUp)
+        window.addEventListener('touchmove', handlePointerMove)
         
         return () => {
             window.removeEventListener('mousedown', handlePointerDown)
             window.removeEventListener('mouseup', handlePointerUp)
             window.removeEventListener('mouseleave', handlePointerUp)
+            window.removeEventListener('mousemove', handlePointerMove)
             window.removeEventListener('touchstart', handlePointerDown)
             window.removeEventListener('touchend', handlePointerUp)
             window.removeEventListener('touchcancel', handlePointerUp)
+            window.removeEventListener('touchmove', handlePointerMove)
             
             // Clean up timeouts and tweens
             if (holdTimeoutRef.current) {
@@ -962,7 +1092,7 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
                 circleMorphTweenRef.current.kill()
             }
         }
-    }, [handlePointerDown, handlePointerUp])
+    }, [handlePointerDown, handlePointerUp, handlePointerMove])
     
     useFrame((state, delta) => {
         if (materialRef.current) {
@@ -1097,6 +1227,79 @@ function ScrollMorph3DUI() {
                 border: 2px solid rgba(100, 100, 255, 0.6);
             }
             
+            .model-menu {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%) scale(0);
+                z-index: 1000;
+                opacity: 0;
+                pointer-events: none;
+                transition: none;
+            }
+            
+            .model-menu.active {
+                pointer-events: auto;
+            }
+            
+            .model-menu-container {
+                background: rgba(0, 0, 0, 0.9);
+                border: 2px solid rgba(255, 255, 255, 0.3);
+                border-radius: 20px;
+                padding: 30px;
+                backdrop-filter: blur(20px);
+                min-width: 400px;
+            }
+            
+            .model-menu-title {
+                color: rgba(255, 255, 255, 0.9);
+                font-size: 20px;
+                font-weight: 600;
+                text-align: center;
+                margin-bottom: 20px;
+                font-family: 'Courier New', monospace;
+            }
+            
+            .model-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 15px;
+            }
+            
+            .model-option {
+                background: rgba(255, 255, 255, 0.1);
+                border: 2px solid rgba(255, 255, 255, 0.2);
+                border-radius: 15px;
+                padding: 20px;
+                color: rgba(255, 255, 255, 0.8);
+                font-family: 'Courier New', monospace;
+                font-size: 16px;
+                font-weight: 600;
+                text-align: center;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                user-select: none;
+            }
+            
+            .model-option:hover {
+                background: rgba(255, 255, 255, 0.2);
+                border-color: rgba(255, 255, 255, 0.5);
+                transform: scale(1.05);
+            }
+            
+            .model-option.selected {
+                background: rgba(100, 200, 255, 0.3);
+                border-color: rgba(100, 200, 255, 0.8);
+                color: rgba(255, 255, 255, 1);
+                box-shadow: 0 0 20px rgba(100, 200, 255, 0.5);
+            }
+            
+            .model-option.drag-over {
+                background: rgba(100, 255, 100, 0.3);
+                border-color: rgba(100, 255, 100, 0.8);
+                transform: scale(1.1);
+            }
+            
             @keyframes float {
                 0%, 100% { transform: translateX(-50%) translateY(0px); }
                 50% { transform: translateX(-50%) translateY(-10px); }
@@ -1121,16 +1324,49 @@ function ScrollMorph3DUI() {
             </div>
             
             <div class="hold-indicator">
-                ⭕ Hold for 1 second to morph to circle
+                ⭕ Hold for 1 second to access model menu
             </div>
         `
         
         document.body.appendChild(ui)
         
+        // Add model selection menu
+        const menu = document.createElement('div')
+        menu.className = 'model-menu'
+        menu.id = 'model-menu'
+        menu.innerHTML = `
+            <div class="model-menu-container">
+                <div class="model-menu-title">Select Model</div>
+                <div class="model-grid">
+                    <div class="model-option" data-model="0">
+                        <div>HD</div>
+                        <small>Minimal Design</small>
+                    </div>
+                    <div class="model-option" data-model="1">
+                        <div>MAE</div>
+                        <small>Classic Style</small>
+                    </div>
+                    <div class="model-option" data-model="2">
+                        <div>OMNI</div>
+                        <small>Universal Form</small>
+                    </div>
+                    <div class="model-option" data-model="3">
+                        <div>WALTERS</div>
+                        <small>Signature Collection</small>
+                    </div>
+                </div>
+            </div>
+        `
+        
+        document.body.appendChild(menu)
+        
         return () => {
             document.head.removeChild(style)
             if (document.body.contains(ui)) {
                 document.body.removeChild(ui)
+            }
+            if (document.body.contains(menu)) {
+                document.body.removeChild(menu)
             }
             window.removeEventListener('resize', setVH)
             window.removeEventListener('orientationchange', setVH)
