@@ -124,19 +124,7 @@ function createCharacterAtlas() {
     texture.magFilter = THREE.LinearFilter
     texture.needsUpdate = true
     
-    // Debug: toon de texture - verwijder oude canvas eerst
-    const oldCanvas = document.querySelector('canvas[style*="fixed"]')
-    if (oldCanvas) oldCanvas.remove()
-    
-    canvas.style.position = 'fixed'
-    canvas.style.top = '10px'
-    canvas.style.right = '10px'
-    canvas.style.width = '300px'
-    canvas.style.height = '300px'
-    canvas.style.border = '2px solid red'
-    canvas.style.zIndex = '9999'
-    canvas.style.pointerEvents = 'none'
-    document.body.appendChild(canvas)
+    // Debug canvas verwijderd - texture wordt niet meer getoond
     
     return { texture, cols, rows }
 }
@@ -153,6 +141,7 @@ const vertexShader = `
     uniform float uTime;
     uniform int uCurrentModel;
     uniform int uTargetModel;
+    uniform float uCircleMorphProgress;
     
     varying vec3 vColor;
     varying float vRandom;
@@ -175,6 +164,33 @@ const vertexShader = `
         vec3 targetPos = getModelPosition(uTargetModel, aTargetPosition0, aTargetPosition1, aTargetPosition2, aTargetPosition3);
         
         vec3 morphedPosition = mix(currentPos, targetPos, uMorphProgress);
+        
+        // Sphere transformation
+        if (uCircleMorphProgress > 0.0) {
+            // Fibonacci sphere distribution for even spacing
+            float particleId = aCharIndex + aRandom * 100.0;
+            float goldenRatio = (1.0 + sqrt(5.0)) / 2.0;
+            float i = particleId;
+            float theta = 2.0 * 3.14159265359 * i / goldenRatio;
+            float phi = acos(1.0 - 2.0 * mod(i * 0.001, 1.0));
+            
+            // Base sphere radius
+            float baseRadius = 7.0;
+            
+            // Add some variation for organic look
+            float radiusVariation = sin(particleId * 7.0) * 0.4 + cos(particleId * 13.0) * 0.2;
+            float radius = baseRadius + radiusVariation;
+            
+            // Convert spherical to cartesian coordinates
+            vec3 spherePos = vec3(
+                radius * sin(phi) * cos(theta),
+                radius * sin(phi) * sin(theta),
+                radius * cos(phi)
+            );
+            
+            // Smooth transition to sphere
+            morphedPosition = mix(morphedPosition, spherePos, uCircleMorphProgress);
+        }
         
         // Stuur world position door naar fragment shader
         vWorldPosition = morphedPosition;
@@ -215,6 +231,7 @@ const fragmentShader = `
     uniform float uAtlasColumns;
     uniform float uAtlasRows;
     uniform vec3 uGlowColor;
+    uniform float uCircleMorphProgress;
     
     varying vec3 vColor;
     varying float vRandom;
@@ -247,7 +264,7 @@ const fragmentShader = `
         // Simpele border detectie - alleen de buitenste particles wit maken
         vec3 zoneColor;
         
-        // Detecteer alleen de echte buitenste rand
+        // Detecteer alleen de echte buitenste rand MAAR niet tijdens circle morph
         // We gebruiken een veel hogere threshold zodat alleen de uiterste particles wit worden
         float maxDist = max(max(abs(vWorldPosition.x), abs(vWorldPosition.y)), abs(vWorldPosition.z));
         float borderThreshold = 5.5; // Verhoog dit voor alleen de allerlaatste rand
@@ -257,7 +274,8 @@ const fragmentShader = `
         float radialThreshold = 6.0;
         
         // Check of deze particle echt aan de uiterste rand is
-        if (maxDist > borderThreshold || radialDist > radialThreshold) {
+        // BELANGRIJK: Skip border detection during circle morph
+        if ((maxDist > borderThreshold || radialDist > radialThreshold) && uCircleMorphProgress < 0.01) {
             // Alleen de allerlaatste border particles - maak ze wit
             zoneColor = vec3(1.0, 1.0, 1.0);
         } else {
@@ -488,6 +506,16 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
     const animatedProgressRef = useRef(0)
     const scrollTimeoutRef = useRef(null)
     
+    // Long hold states
+    const isHoldingRef = useRef(false)
+    const holdTimeoutRef = useRef(null)
+    const circleMorphTweenRef = useRef(null)
+    
+    // Mouse movement tracking
+    const mouseRef = useRef({ x: 0, y: 0 })
+    const targetRotationRef = useRef({ x: 0, y: 0 })
+    const currentRotationRef = useRef({ x: 0, y: 0 })
+    
     // Detect mobile for camera distance
     const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
     const initialZ = isMobile ? 12 : 10
@@ -680,7 +708,8 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
                 uGlowColor: { value: new THREE.Color(MODELS[0].color) },
                 uCharAtlas: { value: characterAtlas.texture },
                 uAtlasColumns: { value: characterAtlas.cols },
-                uAtlasRows: { value: characterAtlas.rows }
+                uAtlasRows: { value: characterAtlas.rows },
+                uCircleMorphProgress: { value: 0 }
             },
             vertexShader,
             fragmentShader,
@@ -827,9 +856,131 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
         }
     }, [modelsLoaded, completeTransition, resetToStart])
     
+    // Long hold event handlers
+    const handlePointerDown = useCallback(() => {
+        if (!materialRef.current) return
+        
+        isHoldingRef.current = true
+        
+        // Start timer for 1 second
+        holdTimeoutRef.current = setTimeout(() => {
+            if (isHoldingRef.current) {
+                console.log('Long hold detected - morphing to circle')
+                
+                // Kill any existing tween
+                if (circleMorphTweenRef.current) {
+                    circleMorphTweenRef.current.kill()
+                }
+                
+                // Animate to circle
+                circleMorphTweenRef.current = gsap.to(materialRef.current.uniforms.uCircleMorphProgress, {
+                    value: 1,
+                    duration: 0.8,
+                    ease: "power2.inOut",
+                    onUpdate: () => {
+                        console.log('Circle morph progress:', materialRef.current.uniforms.uCircleMorphProgress.value)
+                    }
+                })
+            }
+        }, 1000) // 1 second hold
+    }, [])
+    
+    const handlePointerUp = useCallback(() => {
+        if (!materialRef.current) return
+        
+        isHoldingRef.current = false
+        
+        // Clear timeout if still waiting
+        if (holdTimeoutRef.current) {
+            clearTimeout(holdTimeoutRef.current)
+            holdTimeoutRef.current = null
+        }
+        
+        // If circle is active, animate back
+        if (materialRef.current.uniforms.uCircleMorphProgress.value > 0) {
+            console.log('Releasing - morphing back from circle')
+            
+            // Kill any existing tween
+            if (circleMorphTweenRef.current) {
+                circleMorphTweenRef.current.kill()
+            }
+            
+            // Animate back to original
+            circleMorphTweenRef.current = gsap.to(materialRef.current.uniforms.uCircleMorphProgress, {
+                value: 0,
+                duration: 0.6,
+                ease: "power2.inOut"
+            })
+        }
+    }, [])
+    
+    // Mouse movement tracking
+    useEffect(() => {
+        const handleMouseMove = (e) => {
+            // Normalize mouse position to -1 to 1
+            mouseRef.current.x = (e.clientX / window.innerWidth) * 2 - 1
+            mouseRef.current.y = -(e.clientY / window.innerHeight) * 2 + 1
+            
+            // Update target rotation with GSAP for smooth animation
+            gsap.to(targetRotationRef.current, {
+                x: mouseRef.current.y * 0.2, // Vertical mouse = X rotation
+                y: mouseRef.current.x * 0.3, // Horizontal mouse = Y rotation
+                duration: 0.5,
+                ease: "power2.out"
+            })
+        }
+        
+        window.addEventListener('mousemove', handleMouseMove)
+        
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove)
+        }
+    }, [])
+    
+    // Add event listeners
+    useEffect(() => {
+        window.addEventListener('mousedown', handlePointerDown)
+        window.addEventListener('mouseup', handlePointerUp)
+        window.addEventListener('mouseleave', handlePointerUp)
+        window.addEventListener('touchstart', handlePointerDown)
+        window.addEventListener('touchend', handlePointerUp)
+        window.addEventListener('touchcancel', handlePointerUp)
+        
+        return () => {
+            window.removeEventListener('mousedown', handlePointerDown)
+            window.removeEventListener('mouseup', handlePointerUp)
+            window.removeEventListener('mouseleave', handlePointerUp)
+            window.removeEventListener('touchstart', handlePointerDown)
+            window.removeEventListener('touchend', handlePointerUp)
+            window.removeEventListener('touchcancel', handlePointerUp)
+            
+            // Clean up timeouts and tweens
+            if (holdTimeoutRef.current) {
+                clearTimeout(holdTimeoutRef.current)
+            }
+            if (circleMorphTweenRef.current) {
+                circleMorphTweenRef.current.kill()
+            }
+        }
+    }, [handlePointerDown, handlePointerUp])
+    
     useFrame((state, delta) => {
         if (materialRef.current) {
             materialRef.current.uniforms.uTime.value += delta
+        }
+        
+        // Smooth rotation lerp
+        currentRotationRef.current.x += (targetRotationRef.current.x - currentRotationRef.current.x) * 0.1
+        currentRotationRef.current.y += (targetRotationRef.current.y - currentRotationRef.current.y) * 0.1
+        
+        // Apply rotation to mesh
+        if (meshRef.current) {
+            meshRef.current.rotation.x = currentRotationRef.current.x
+            meshRef.current.rotation.y = currentRotationRef.current.y
+            
+            // Also add some position offset based on mouse
+            meshRef.current.position.x = mouseRef.current.x * 0.5
+            meshRef.current.position.y = mouseRef.current.y * 0.3
         }
         
         // Update random karakters elke 0.5 seconde voor dynamisch effect
@@ -932,6 +1083,20 @@ function ScrollMorph3DUI() {
                 pointer-events: auto;
             }
             
+            .hold-indicator {
+                position: absolute;
+                bottom: 80px;
+                left: 50%;
+                transform: translateX(-50%);
+                color: rgba(255, 255, 255, 0.9);
+                font-size: 16px;
+                font-weight: 600;
+                background: rgba(100, 100, 255, 0.3);
+                padding: 10px 20px;
+                border-radius: 20px;
+                border: 2px solid rgba(100, 100, 255, 0.6);
+            }
+            
             @keyframes float {
                 0%, 100% { transform: translateX(-50%) translateY(0px); }
                 50% { transform: translateX(-50%) translateY(-10px); }
@@ -953,6 +1118,10 @@ function ScrollMorph3DUI() {
             <div class="scroll-indicator">
                 ↓ Scroll to morph between 3D models ↓<br>
                 <small>100% scroll = next model</small>
+            </div>
+            
+            <div class="hold-indicator">
+                ⭕ Hold for 1 second to morph to circle
             </div>
         `
         
