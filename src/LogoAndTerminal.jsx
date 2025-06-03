@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import { AdditiveBlending } from 'three'
 
 export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplete }) {
-    const { raycaster, mouse, camera } = useThree()
+    const { camera } = useThree()
     const meshRef = useRef()
     const textureRef = useRef()
     const canvasRef = useRef()
@@ -29,7 +29,7 @@ export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplet
     const [isHoveringEnter, setIsHoveringEnter] = useState(false)
     const [portfolioShown, setPortfolioShown] = useState(false)
     const [isTypingOut, setIsTypingOut] = useState(false)
-    const [typingOutProgress, setTypingOutProgress] = useState(0)
+    const [, setTypingOutProgress] = useState(0)
     const typingOutStartTime = useRef(0)
     const [cameraZoom, setCameraZoom] = useState(0)
     const [startCameraZoom, setStartCameraZoom] = useState(false)

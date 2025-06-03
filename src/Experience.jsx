@@ -11,7 +11,6 @@ export default function Experience()
     const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
     const [cameraZoom, setCameraZoom] = useState(0)
     const [currentScene, setCurrentScene] = useState('terminal') // 'terminal' or 'particles'
-    const [sceneTransition, setSceneTransition] = useState(0) // 0 to 1 for fade transition
     const targetPosition = useRef({ x: 0, y: 0, z: 15 })
     const currentPosition = useRef({ x: 0, y: 0, z: 15 })
     
