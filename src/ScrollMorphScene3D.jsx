@@ -8,12 +8,83 @@ import { ScrollToPlugin } from 'gsap/ScrollToPlugin'
 
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin)
 
+// Karakters die we gaan gebruiken voor de particles
+const CODE_CHARACTERS = [
+    '[', ']', '{', '}', '(', ')', '<', '>', '/', '\\', 
+    ':', ';', ',', '.', '*', '!', '?', '@', '#', '$',
+    '%', '^', '&', '=', '+', '-', '_', '|', '~', '"',
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
+    'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+    'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D'
+]
+
+// Creëer texture atlas met alle karakters
+function createCharacterAtlas() {
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    const charSize = 64
+    const cols = 10
+    const rows = Math.ceil(CODE_CHARACTERS.length / cols)
+    
+    canvas.width = charSize * cols
+    canvas.height = charSize * rows
+    
+    // Zwarte achtergrond voor betere contrast
+    ctx.fillStyle = '#000000'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    
+    ctx.font = 'bold 48px monospace'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    
+    CODE_CHARACTERS.forEach((char, i) => {
+        const col = i % cols
+        const row = Math.floor(i / cols)
+        const x = col * charSize + charSize / 2
+        const y = row * charSize + charSize / 2
+        
+        // Groene kleur zoals in Matrix
+        ctx.fillStyle = '#00ff00'
+        
+        // Teken karakter met glow effect
+        ctx.shadowColor = '#00ff00'
+        ctx.shadowBlur = 10
+        ctx.fillText(char, x, y)
+        
+        // Extra glow laag
+        ctx.shadowBlur = 20
+        ctx.globalAlpha = 0.5
+        ctx.fillText(char, x, y)
+        ctx.globalAlpha = 1.0
+    })
+    
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.minFilter = THREE.LinearFilter
+    texture.magFilter = THREE.LinearFilter
+    texture.needsUpdate = true
+    
+    // Debug: toon de texture
+    canvas.style.position = 'fixed'
+    canvas.style.top = '10px'
+    canvas.style.right = '10px'
+    canvas.style.width = '300px'
+    canvas.style.height = '300px'
+    canvas.style.border = '2px solid red'
+    canvas.style.zIndex = '9999'
+    canvas.style.pointerEvents = 'none'
+    document.body.appendChild(canvas)
+    
+    return { texture, cols, rows }
+}
+
 const vertexShader = `
     attribute vec3 aTargetPosition0;
     attribute vec3 aTargetPosition1;
     attribute vec3 aTargetPosition2;
     attribute vec3 aTargetPosition3;
     attribute float aRandom;
+    attribute float aCharIndex;
     
     uniform float uMorphProgress;
     uniform float uTime;
@@ -22,6 +93,7 @@ const vertexShader = `
     
     varying vec3 vColor;
     varying float vRandom;
+    varying float vCharIndex;
     
     vec3 getModelPosition(int modelIndex, vec3 pos0, vec3 pos1, vec3 pos2, vec3 pos3) {
         if (modelIndex == 0) return pos0;
@@ -33,19 +105,22 @@ const vertexShader = `
     void main() {
         vColor = color;
         vRandom = aRandom;
+        vCharIndex = aCharIndex;
         
         vec3 currentPos = getModelPosition(uCurrentModel, aTargetPosition0, aTargetPosition1, aTargetPosition2, aTargetPosition3);
         vec3 targetPos = getModelPosition(uTargetModel, aTargetPosition0, aTargetPosition1, aTargetPosition2, aTargetPosition3);
         
         vec3 morphedPosition = mix(currentPos, targetPos, uMorphProgress);
         
-        // Add some movement
+        // Subtiele beweging voor levendigheid
         float timeOffset = uTime + aRandom * 6.28318;
-        morphedPosition += sin(timeOffset) * 0.0;
+        morphedPosition.x += sin(timeOffset * 0.5) * 0.05;
+        morphedPosition.y += cos(timeOffset * 0.7) * 0.05;
         
         vec4 mvPosition = modelViewMatrix * vec4(morphedPosition, 1.0);
         
-        float size = 2.0;
+        // Kleine grootte voor individuele karakters
+        float size = 1.0;
         gl_PointSize = size * (200.0 / -mvPosition.z);
         
         gl_Position = projectionMatrix * mvPosition;
@@ -53,25 +128,56 @@ const vertexShader = `
 `
 
 const fragmentShader = `
+    uniform sampler2D uCharAtlas;
+    uniform float uTime;
+    uniform float uAtlasColumns;
+    uniform float uAtlasRows;
     uniform vec3 uGlowColor;
     
     varying vec3 vColor;
     varying float vRandom;
+    varying float vCharIndex;
     
     void main() {
-        vec2 center = gl_PointCoord - 0.5;
-        float dist = length(center);
+        // Bereken welk karakter we moeten tonen
+        float col = mod(vCharIndex, uAtlasColumns);
+        float row = floor(vCharIndex / uAtlasColumns);
         
-        if (dist > 0.5) discard;
+        // Map gl_PointCoord naar de juiste cel in de atlas
+        vec2 cellUV = vec2(
+            (col + gl_PointCoord.x) / uAtlasColumns,
+            1.0 - (row + 1.0 - gl_PointCoord.y) / uAtlasRows
+        );
         
-        float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
-        alpha = pow(alpha, 3.0);
+        vec4 charColor = texture2D(uCharAtlas, cellUV);
         
-        float sparkle = sin(vRandom * 100.0) * 0.3 + 0.7;
+        // Alleen pixels met karakter data tonen (niet de zwarte achtergrond)
+        if (charColor.r < 0.1 && charColor.g < 0.1 && charColor.b < 0.1) {
+            discard;
+        }
         
-        vec3 finalColor = mix(vColor, uGlowColor, 0.2) * sparkle;
+        // Individuele flicker per particle
+        float flicker1 = sin(uTime * 3.0 + vRandom * 17.3) * 0.5 + 0.5;
+        float flicker2 = sin(uTime * 7.0 + vRandom * 23.7) * 0.5 + 0.5;
+        float flicker3 = sin(uTime * 11.0 + vRandom * 31.4) * 0.5 + 0.5;
         
-        gl_FragColor = vec4(finalColor, alpha);
+        // Combineer verschillende flicker frequenties
+        float combinedFlicker = flicker1 * 0.3 + flicker2 * 0.3 + flicker3 * 0.4;
+        
+        // Zorg dat het flikkeren subtiel is (tussen 0.7 en 1.0)
+        float flickerAmount = 0.7 + combinedFlicker * 0.3;
+        
+        // Occasionele sterke flicker
+        float strongFlicker = step(0.98, sin(uTime * 2.0 + vRandom * 100.0));
+        flickerAmount = mix(flickerAmount, 0.3, strongFlicker);
+        
+        // Gebruik de karakter kleur met vColor tint
+        vec3 finalColor = charColor.rgb * vColor;
+        
+        // Extra glow
+        finalColor *= 1.2;
+        
+        gl_FragColor = vec4(finalColor, charColor.a * flickerAmount);
     }
 `
 
@@ -259,6 +365,9 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
     const { camera } = useThree()
     const [modelsLoaded, setModelsLoaded] = useState(false)
     
+    // Creëer character atlas een keer bij component mount
+    const characterAtlas = useMemo(() => createCharacterAtlas(), [])
+    
     const currentModelRef = useRef(0)
     const scrollProgressRef = useRef(0)
     const isTransitioningRef = useRef(false)
@@ -425,14 +534,21 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
         }
         geo.setAttribute('aRandom', new THREE.BufferAttribute(randoms, 1))
         
-        // Colors
+        // Character indices - random karakter voor elke particle
+        const charIndices = new Float32Array(particleCount)
+        for (let i = 0; i < particleCount; i++) {
+            charIndices[i] = Math.floor(Math.random() * CODE_CHARACTERS.length)
+        }
+        geo.setAttribute('aCharIndex', new THREE.BufferAttribute(charIndices, 1))
+        
+        // Colors - Matrix groene tinten
         const colors = new Float32Array(particleCount * 3)
-        const baseColor = new THREE.Color(MODELS[0].color)
         for (let i = 0; i < particleCount; i++) {
             const idx = i * 3
-            colors[idx] = baseColor.r + Math.random() * 0.1
-            colors[idx + 1] = baseColor.g + Math.random() * 0.1
-            colors[idx + 2] = baseColor.b + Math.random() * 0.1
+            const brightness = 0.5 + Math.random() * 0.5
+            colors[idx] = brightness * 0.1     // Beetje rood
+            colors[idx + 1] = brightness       // Veel groen
+            colors[idx + 2] = brightness * 0.3 // Beetje blauw
         }
         geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
         
@@ -447,7 +563,10 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
                 uMorphProgress: { value: 0 },
                 uCurrentModel: { value: 0 },
                 uTargetModel: { value: 1 },
-                uGlowColor: { value: new THREE.Color(MODELS[0].color) }
+                uGlowColor: { value: new THREE.Color(MODELS[0].color) },
+                uCharAtlas: { value: characterAtlas.texture },
+                uAtlasColumns: { value: characterAtlas.cols },
+                uAtlasRows: { value: characterAtlas.rows }
             },
             vertexShader,
             fragmentShader,
@@ -456,24 +575,12 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
             depthWrite: false,
             vertexColors: true
         })
-    }, [])
+    }, [characterAtlas])
     
     const updateColors = useCallback((modelIndex) => {
         if (!geometry) return
         
-        const colorAttr = geometry.getAttribute('color')
-        const color = new THREE.Color(MODELS[modelIndex].color)
-        const colors = colorAttr.array
-        
-        for (let i = 0; i < particleCount; i++) {
-            const idx = i * 3
-            const variation = Math.random() * 0.1
-            colors[idx] = color.r + variation
-            colors[idx + 1] = color.g + variation
-            colors[idx + 2] = color.b + variation
-        }
-        colorAttr.needsUpdate = true
-        
+        // Update alleen de glow color, behoud de groene Matrix kleuren
         const newColor = new THREE.Color(MODELS[modelIndex].color)
         gsap.to(materialRef.current.uniforms.uGlowColor.value, {
             r: newColor.r,
@@ -481,7 +588,7 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
             b: newColor.b,
             duration: 0.5
         })
-    }, [geometry, particleCount])
+    }, [geometry])
     
     const completeTransition = useCallback(() => {
         // Calculate next models
@@ -606,12 +713,25 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
         }
     }, [modelsLoaded, completeTransition, resetToStart])
     
-    useFrame((_, delta) => {
+    useFrame((state, delta) => {
         if (materialRef.current) {
             materialRef.current.uniforms.uTime.value += delta
         }
         
-        // Removed rotation - models stay static
+        // Update random karakters elke 0.5 seconde voor dynamisch effect
+        const time = state.clock.getElapsedTime()
+        if (geometry && Math.floor(time * 2) !== Math.floor((time - delta) * 2)) {
+            const charAttr = geometry.getAttribute('aCharIndex')
+            const charIndices = charAttr.array
+            
+            // Verander 5% van de karakters
+            const changeCount = Math.floor(particleCount * 0.05)
+            for (let i = 0; i < changeCount; i++) {
+                const index = Math.floor(Math.random() * particleCount)
+                charIndices[index] = Math.floor(Math.random() * CODE_CHARACTERS.length)
+            }
+            charAttr.needsUpdate = true
+        }
     })
     
     if (!geometry) return null
@@ -754,7 +874,7 @@ MODELS.forEach(model => {
 export default function ScrollMorphScene3D({ onSceneStart }) {
     const particleCount = useMemo(() => {
         const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
-        return isMobile ? 15000 : 25000
+        return isMobile ? 500 : 1000 // Veel minder particles
     }, [])
     
     useEffect(() => {
