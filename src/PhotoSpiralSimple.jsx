@@ -1,16 +1,74 @@
-import { useRef, useMemo, useEffect } from 'react'
+import { useRef, useMemo, useEffect, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
-// Simple Photo with fallback texture
-function SimplePhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurve, opacityCurve }) {
+// Photo shader based on kokomi.js example
+const vertexShader = /* glsl */ `
+uniform float iTime;
+uniform vec3 iResolution;
+uniform vec4 iMouse;
+
+varying vec2 vUv;
+
+uniform vec3 uPosition;
+uniform float uRotation;
+uniform float uScale;
+
+mat2 rotation2d(float angle){
+    float s=sin(angle);
+    float c=cos(angle);
+    
+    return mat2(
+        c,-s,
+        s,c
+    );
+}
+
+vec2 rotate(vec2 v,float angle){
+    return rotation2d(angle)*v;
+}
+
+void main(){
+    vec3 p=position;
+    p.xy=rotate(p.xy,uRotation);
+    p.xyz*=uScale;
+    p+=uPosition;
+    gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);
+    
+    vUv=uv;
+}
+`;
+
+const fragmentShader = /* glsl */ `
+uniform float iTime;
+uniform vec3 iResolution;
+uniform vec4 iMouse;
+
+varying vec2 vUv;
+
+uniform sampler2D iChannel0;
+uniform float uOpacity;
+uniform vec3 uTintColor;
+
+void main(){
+    vec2 uv=vUv;
+    vec4 tex=texture(iChannel0,uv);
+    vec3 col=tex.xyz*uTintColor;
+    gl_FragColor=vec4(col,uOpacity*.9);
+}
+`;
+
+// Simple Photo with actual image loading and fallback
+function SimplePhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurve, opacityCurve, imageUrl }) {
   const meshRef = useRef()
   const progressRef = useRef(offset)
+  const [imageLoaded, setImageLoaded] = useState(false)
+  const [imageTexture, setImageTexture] = useState(null)
   
-  // Create a simple colored texture as fallback - kokomi uses 320x400
-  const texture = useMemo(() => {
+  // Create fallback colored texture
+  const fallbackTexture = useMemo(() => {
     const canvas = document.createElement('canvas')
-    canvas.width = 320  // kokomi example dimensions
+    canvas.width = 320
     canvas.height = 400
     const ctx = canvas.getContext('2d')
     
@@ -21,28 +79,107 @@ function SimplePhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
     ctx.fillStyle = color
     ctx.fillRect(0, 0, 320, 400)
     
-    // Add text
+    // Add loading text
     ctx.fillStyle = 'white'
-    ctx.font = 'bold 24px Arial'
+    ctx.font = 'bold 18px Arial'
     ctx.textAlign = 'center'
-    ctx.fillText(`Photo ${index + 1}`, 160, 200)
+    ctx.fillText('Loading...', 160, 180)
+    ctx.fillText(`Photo ${index + 1}`, 160, 220)
     
     return new THREE.CanvasTexture(canvas)
   }, [index])
   
-  // Simple material
+  // Load actual image with cleanup
+  useEffect(() => {
+    if (imageUrl) {
+      console.log(`Loading image: ${imageUrl}`) // Debug log
+      const loader = new THREE.TextureLoader()
+      let cancelled = false
+      
+      loader.load(
+        imageUrl,
+        (texture) => {
+          if (!cancelled) {
+            console.log(`Image loaded successfully: ${imageUrl}`) // Debug log
+            // Image loaded successfully
+            texture.minFilter = THREE.LinearFilter
+            texture.magFilter = THREE.LinearFilter
+            texture.wrapS = THREE.ClampToEdgeWrapping
+            texture.wrapT = THREE.ClampToEdgeWrapping
+            texture.flipY = false // Important for proper image display
+            setImageTexture(texture)
+            setImageLoaded(true)
+          }
+        },
+        (progress) => {
+          console.log(`Loading progress for ${imageUrl}:`, progress) // Debug log
+        },
+        (error) => {
+          if (!cancelled) {
+            // Image failed to load, keep using fallback
+            console.warn(`Failed to load image: ${imageUrl}`, error)
+            setImageLoaded(false)
+          }
+        }
+      )
+      
+      return () => {
+        cancelled = true
+        // Cleanup previous texture if it exists
+        if (imageTexture) {
+          imageTexture.dispose()
+        }
+      }
+    }
+  }, [imageUrl])
+  
+  // Use loaded image or fallback
+  const texture = imageLoaded && imageTexture ? imageTexture : fallbackTexture
+  
+  // Shader material with kokomi.js style
   const material = useMemo(() => {
-    return new THREE.MeshBasicMaterial({
-      map: texture,
+    return new THREE.ShaderMaterial({
+      vertexShader,
+      fragmentShader,
       transparent: true,
       side: THREE.DoubleSide,
       depthTest: true,
-      depthWrite: false
+      depthWrite: false,
+      uniforms: {
+        iTime: { value: 0 },
+        iResolution: { value: new THREE.Vector3(window.innerWidth, window.innerHeight, 1) },
+        iMouse: { value: new THREE.Vector4(0, 0, 0, 0) },
+        iChannel0: { value: fallbackTexture }, // Start with fallback texture
+        uPosition: { value: new THREE.Vector3(0, 0, 0) },
+        uRotation: { value: 0 },
+        uScale: { value: 1 },
+        uOpacity: { value: 1 },
+        uTintColor: { value: new THREE.Color("#a5a5a5") }
+      }
     })
-  }, [texture])
+  }, [fallbackTexture])
+  
+  // Update material uniforms when texture changes
+  useEffect(() => {
+    if (material && material.uniforms) {
+      material.uniforms.iChannel0.value = texture
+      material.needsUpdate = true
+    }
+  }, [texture, material])
+  
+  // Set tint color variation based on index (like kokomi example)
+  useEffect(() => {
+    if (material && material.uniforms) {
+      // Use the kokomi.js standard tint color
+      material.uniforms.uTintColor.value = new THREE.Color("#a5a5a5")
+    }
+  }, [material, index])
   
   useFrame((state, delta) => {
-    if (!meshRef.current) return
+    if (!meshRef.current || !material.uniforms) return
+    
+    // Update shader time uniform
+    material.uniforms.iTime.value = state.clock.elapsedTime
     
     // Update progress - like the kokomi example
     const normalizedDelta = delta / 0.016
@@ -56,30 +193,44 @@ function SimplePhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
     // Power-based progression for smooth acceleration like the example
     const i2 = Math.pow(i, 1.7)
     
-    // Get position from curve using power progression
+    // Sync position to shader uniform (kokomi style)
     const position = curve.getPointAt(i2)
-    meshRef.current.position.copy(position)
+    material.uniforms.uPosition.value.copy(position)
     
-    // Get rotation from rotation curve
+    // Sync rotation to shader uniform
     const rotationPoint = new THREE.Vector2()
     rotationCurve.getPointAt(i, rotationPoint)
-    meshRef.current.rotation.z = rotationPoint.y
+    material.uniforms.uRotation.value = rotationPoint.y
     
-    // Get scale from scale curve - exactly like kokomi example
+    // Sync scale to shader uniform
     const scalePoint = new THREE.Vector2()
     scaleCurve.getPointAt(i2, scalePoint)
-    const scale = 1 - scalePoint.y // Exact kokomi logic: 1 - scale.y
-    meshRef.current.scale.setScalar(scale)
+    material.uniforms.uScale.value = 1 - scalePoint.y
     
-    // Get opacity from opacity curve
+    // Sync opacity to shader uniform
     const opacityPoint = new THREE.Vector2()
     opacityCurve.getPointAt(i, opacityPoint)
-    material.opacity = opacityPoint.y
+    material.uniforms.uOpacity.value = opacityPoint.y
   })
   
+  // Calculate geometry size based on texture (75% of kokomi size)
+  const geometrySize = useMemo(() => {
+    if (imageLoaded && imageTexture) {
+      // Use actual image dimensions with 75% of kokomi scaling
+      const width = imageTexture.image.width * 0.005 * 0.75
+      const height = imageTexture.image.height * 0.005 * 0.75
+      return [width, height]
+    } else {
+      // Use fallback dimensions (320x400 ratio) with 75% of kokomi scaling
+      const width = 320 * 0.005 * 0.75
+      const height = 400 * 0.005 * 0.75
+      return [width, height]
+    }
+  }, [imageLoaded, imageTexture])
+
   return (
     <mesh ref={meshRef} material={material} renderOrder={-1}>
-      <planeGeometry args={[texture.image.width * 0.005, texture.image.height * 0.005]} />
+      <planeGeometry args={geometrySize} />
     </mesh>
   )
 }
@@ -88,7 +239,7 @@ function SimplePhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
 export default function PhotoSpiralSimple({ images = [], speed = 1 }) {
   const groupRef = useRef()
   
-  // 3D curve inspired by the kokomi example
+  // 3D curve inspired by the kokomi example (original)
   const curve = useMemo(() => {
     const curvePoints = [
       new THREE.Vector3(-7, -1, -8),
@@ -169,18 +320,26 @@ export default function PhotoSpiralSimple({ images = [], speed = 1 }) {
           key={spiralIndex} 
           rotation={[0, 0, (Math.PI * 2 / spiralCount) * spiralIndex]}
         >
-          {photoInstances.map((instance, idx) => (
-            <SimplePhoto
-              key={`${spiralIndex}-${idx}`}
-              index={instance.index}
-              curve={curve}
-              offset={instance.offset}
-              speed={speed}
-              rotationCurve={rotationCurve}
-              scaleCurve={scaleCurve}
-              opacityCurve={opacityCurve}
-            />
-          ))}
+          {photoInstances.map((instance, idx) => {
+            // Cycle through available images for each photo
+            const imageUrl = images && images.length > 0 
+              ? images[instance.index % images.length] 
+              : null
+            
+            return (
+              <SimplePhoto
+                key={`${spiralIndex}-${idx}`}
+                index={instance.index}
+                curve={curve}
+                offset={instance.offset}
+                speed={speed}
+                rotationCurve={rotationCurve}
+                scaleCurve={scaleCurve}
+                opacityCurve={opacityCurve}
+                imageUrl={imageUrl}
+              />
+            )
+          })}
         </group>
       ))}
     </group>

@@ -1481,11 +1481,11 @@ export default function ScrollMorphScene3D({ onSceneStart }) {
         }, 1000)
     }, [onSceneStart, particleCount])
     
-    // Photo images - PNG files from your img folder
+    // Photo images - PNG files from public/img folder
     const photoImages = [
-        '/img/photo1.png',  // Update to your actual PNG filename
-        '/img/photo2.png',  // Update to your actual PNG filename
-        '/img/photo3.png'   // Update to your actual PNG filename
+        'img/photo1.png',  // Correct path relative to public folder
+        'img/photo2.png',  // Correct path relative to public folder
+        'img/photo3.png'   // Correct path relative to public folder
     ]
     
     return (
