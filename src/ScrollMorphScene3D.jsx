@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { ScrollToPlugin } from 'gsap/ScrollToPlugin'
+import PhotoSpiralSimple from './PhotoSpiralSimple'
 
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin)
 
@@ -1454,6 +1455,8 @@ export default function ScrollMorphScene3D({ onSceneStart }) {
         return isMobile ? 2500 : 5000 // 1.25x meer particles
     }, [])
     
+    const [showPhotoSpiral, setShowPhotoSpiral] = useState(false)
+    
     useEffect(() => {
         const scrollContainer = document.getElementById('scroll-wrapper')
         if (scrollContainer) {
@@ -1471,13 +1474,28 @@ export default function ScrollMorphScene3D({ onSceneStart }) {
         
         if (onSceneStart) onSceneStart()
         console.log(`ScrollMorphScene3D initialized with ${particleCount} particles and 3D models`)
+        
+        // Show photo spiral after 1 second
+        setTimeout(() => {
+            setShowPhotoSpiral(true)
+        }, 1000)
     }, [onSceneStart, particleCount])
+    
+    // Photo images - PNG files from your img folder
+    const photoImages = [
+        '/img/photo1.png',  // Update to your actual PNG filename
+        '/img/photo2.png',  // Update to your actual PNG filename
+        '/img/photo3.png'   // Update to your actual PNG filename
+    ]
     
     return (
         <>
             <Suspense fallback={<LoadingFallback />}>
                 <ScrollMorph3DParticles particleCount={particleCount} />
             </Suspense>
+            {showPhotoSpiral && (
+                <PhotoSpiralSimple images={photoImages} speed={1} />
+            )}
             <ScrollMorph3DUI />
         </>
     )

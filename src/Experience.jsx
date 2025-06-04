@@ -45,7 +45,7 @@ export default function Experience()
         scene.background = new THREE.Color(0x000000)
         
         // Reset camera position refs to let ScrollMorphScene take control
-        const baseZ = isMobile ? 12 : 10
+        const baseZ = isMobile ? 5 : 3  // Even closer to make photos bigger
         currentPosition.current = { x: 0, y: 0, z: baseZ }
         targetPosition.current = { x: 0, y: 0, z: baseZ }
         
