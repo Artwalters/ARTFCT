@@ -1,6 +1,7 @@
 import { useRef, useEffect, useMemo, useCallback, useState, Suspense } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
+import { useNavigate } from 'react-router-dom'
 import * as THREE from 'three'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
@@ -314,10 +315,10 @@ const fragmentShader = `
 `
 
 const MODELS = [
-    { name: 'HD', path: './hd.glb', color: 0x00CED1, scale: 50.0 },
-    { name: 'Mae', path: './mae.glb', color: 0xFF69B4, scale: 50.0 },
-    { name: 'Omni', path: './omni.glb', color: 0xFFD700, scale: 50.0 },
-    { name: 'Walters', path: './walters.glb', color: 0x32CD32, scale: 50.0 }
+    { name: 'HD', path: './hd.glb', color: 0x00CED1, scale: 50.0, projectUrl: 'project/hd' },
+    { name: 'Mae', path: './mae.glb', color: 0xFF69B4, scale: 50.0, projectUrl: 'project/mae' },
+    { name: 'Omni', path: './omni.glb', color: 0xFFD700, scale: 50.0, projectUrl: 'project/omni' },
+    { name: 'Walters', path: './walters.glb', color: 0x32CD32, scale: 50.0, projectUrl: 'project/walters' }
 ]
 
 // Helper function to sample points from multiple geometries
@@ -756,6 +757,12 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
         if (counter) {
             counter.textContent = `Model ${nextCurrent + 1} / ${MODELS.length}: ${MODELS[nextCurrent].name}`
         }
+        
+        // Update View Project button
+        const projectButton = document.getElementById('view-project-button')
+        if (projectButton) {
+            projectButton.setAttribute('data-url', MODELS[nextCurrent].projectUrl)
+        }
     }, [updateColors])
     
     const resetToStart = useCallback(() => {
@@ -1034,6 +1041,12 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
                 if (counter) {
                     counter.textContent = `Model ${selectedIndex + 1} / ${MODELS.length}: ${MODELS[selectedIndex].name}`
                 }
+                
+                // Update View Project button
+                const projectButton = document.getElementById('view-project-button')
+                if (projectButton) {
+                    projectButton.setAttribute('data-url', MODELS[selectedIndex].projectUrl)
+                }
             }
             
             hideMenu()
@@ -1140,6 +1153,8 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
 }
 
 function ScrollMorph3DUI() {
+    const navigate = useNavigate()
+    
     useEffect(() => {
         const setVH = () => {
             const vh = window.innerHeight * 0.01
@@ -1304,6 +1319,34 @@ function ScrollMorph3DUI() {
                 0%, 100% { transform: translateX(-50%) translateY(0px); }
                 50% { transform: translateX(-50%) translateY(-10px); }
             }
+            
+            .view-project-button {
+                position: absolute;
+                bottom: 140px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(255, 255, 255, 0.1);
+                border: 2px solid rgba(255, 255, 255, 0.3);
+                color: rgba(255, 255, 255, 0.9);
+                padding: 12px 30px;
+                border-radius: 25px;
+                font-size: 16px;
+                font-weight: 600;
+                font-family: 'Courier New', monospace;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                pointer-events: auto;
+                backdrop-filter: blur(10px);
+                text-decoration: none;
+                display: inline-block;
+            }
+            
+            .view-project-button:hover {
+                background: rgba(255, 255, 255, 0.2);
+                border-color: rgba(255, 255, 255, 0.6);
+                transform: translateX(-50%) scale(1.05);
+                box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+            }
         `
         document.head.appendChild(style)
         
@@ -1326,6 +1369,10 @@ function ScrollMorph3DUI() {
             <div class="hold-indicator">
                 ⭕ Hold for 1 second to access model menu
             </div>
+            
+            <button class="view-project-button" id="view-project-button" data-url="${MODELS[0].projectUrl}">
+                View Project
+            </button>
         `
         
         document.body.appendChild(ui)
@@ -1360,6 +1407,17 @@ function ScrollMorph3DUI() {
         
         document.body.appendChild(menu)
         
+        // Add click handler for View Project button
+        const viewProjectButton = document.getElementById('view-project-button')
+        if (viewProjectButton) {
+            viewProjectButton.addEventListener('click', () => {
+                const url = viewProjectButton.getAttribute('data-url')
+                if (url) {
+                    navigate(url)
+                }
+            })
+        }
+        
         return () => {
             document.head.removeChild(style)
             if (document.body.contains(ui)) {
@@ -1371,7 +1429,7 @@ function ScrollMorph3DUI() {
             window.removeEventListener('resize', setVH)
             window.removeEventListener('orientationchange', setVH)
         }
-    }, [])
+    }, [navigate])
     
     return null
 }

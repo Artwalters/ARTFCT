@@ -1,10 +1,12 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
+import { useNavigate } from 'react-router-dom'
 import * as THREE from 'three'
 import { AdditiveBlending } from 'three'
 
 export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplete }) {
     const { camera } = useThree()
+    const navigate = useNavigate()
     const meshRef = useRef()
     const textureRef = useRef()
     const canvasRef = useRef()
@@ -173,6 +175,10 @@ export default function LogoAndTerminal({ onCameraZoomChange, onAnimationComplet
             setIsTypingOut(false)
             // Mark content as permanently cleared
             setContentCleared(true)
+            // Navigate to projects page
+            setTimeout(() => {
+                navigate('/projects')
+            }, 500) // Small delay for smooth transition
         }, 3000) // Wait for typing out animation (1000ms phase1 + 2000ms phase2)
     }
     
