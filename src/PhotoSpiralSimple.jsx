@@ -49,12 +49,89 @@ varying vec2 vUv;
 uniform sampler2D iChannel0;
 uniform float uOpacity;
 uniform vec3 uTintColor;
+uniform float uDissolveProgress;
+
+// Noise function for dissolve effect
+float random(vec2 st) {
+    return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+}
+
+// Create particle-like pattern
+float particlePattern(vec2 uv) {
+    vec2 gridUV = fract(uv * 10.0); // Create 10x10 grid (larger particles)
+    float dist = length(gridUV - 0.5) * 2.0; // Distance from grid cell center
+    return 1.0 - smoothstep(0.4, 0.5, dist); // Larger circular particles
+}
 
 void main(){
     vec2 uv=vUv;
-    vec4 tex=texture(iChannel0,uv);
-    vec3 col=tex.xyz*uTintColor;
-    gl_FragColor=vec4(col,uOpacity*.9);
+    
+    // Sample original texture
+    vec4 tex = texture(iChannel0, uv);
+    vec3 col = tex.xyz * uTintColor;
+    
+    // Keep original kokomi darkness (no brightness boost)
+    
+    // Start with full image visibility
+    float finalAlpha = uOpacity * 0.9;
+    
+    // Only apply grid effect when actually dissolving  
+    if (uDissolveProgress > 0.05) {
+        // Grid-based UV for particle effect
+        vec2 gridSize = vec2(8.0, 8.0); // 8x8 grid (larger squares)
+        vec2 gridUV = fract(uv * gridSize);
+        vec2 gridCell = floor(uv * gridSize);
+        
+        // Create square particle shape with small gap
+        float gapSize = 0.05; // Small gap between squares
+        float squareMask = 1.0;
+        if (gridUV.x < gapSize || gridUV.x > 1.0 - gapSize || 
+            gridUV.y < gapSize || gridUV.y > 1.0 - gapSize) {
+            squareMask = 0.0;
+        }
+        
+        // Random value per grid cell for dissolve
+        float cellRandom = random(gridCell);
+        
+        // Determine if this square should be removed
+        float keepSquare = step(uDissolveProgress, cellRandom);
+        
+        // Add VS Code particle colors to squares about to dissolve
+        if (keepSquare > 0.0 && cellRandom < uDissolveProgress + 0.15) {
+            float glowStrength = 1.0 - (cellRandom - uDissolveProgress) / 0.15;
+            
+            // Pick truly random color based on cell position
+            float cellHash = random(gridCell + vec2(123.456, 789.012));
+            vec3 particleColor;
+            float colorIndex = floor(cellHash * 6.0);
+            
+            if (colorIndex == 0.0) {
+                particleColor = vec3(0.61, 0.86, 0.996); // #9CDCFE lichtblauw
+            } else if (colorIndex == 1.0) {
+                particleColor = vec3(0.773, 0.525, 0.753); // #C586C0 paars
+            } else if (colorIndex == 2.0) {
+                particleColor = vec3(0.863, 0.855, 0.667); // #DCDCAA geel
+            } else if (colorIndex == 3.0) {
+                particleColor = vec3(0.306, 0.788, 0.69); // #4EC9B0 turquoise
+            } else if (colorIndex == 4.0) {
+                particleColor = vec3(0.808, 0.569, 0.471); // #CE9178 oranje
+            } else {
+                particleColor = vec3(0.843, 0.733, 0.49); // #D7BA7D licht oranje
+            }
+            
+            col = mix(col, particleColor, glowStrength * 0.6);
+            col *= 1.0 + glowStrength * 0.8;
+        }
+        
+        // Apply dissolve: transition from full image to grid squares
+        float dissolveTransition = smoothstep(0.0, 0.2, uDissolveProgress);
+        finalAlpha *= mix(1.0, squareMask * keepSquare, dissolveTransition);
+    }
+    
+    // Discard fully transparent pixels
+    if (finalAlpha < 0.01) discard;
+    
+    gl_FragColor = vec4(col, finalAlpha);
 }
 `;
 
@@ -65,11 +142,11 @@ function SimplePhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageTexture, setImageTexture] = useState(null)
   
-  // Create fallback colored texture
+  // Create fallback colored texture (square)
   const fallbackTexture = useMemo(() => {
     const canvas = document.createElement('canvas')
     canvas.width = 320
-    canvas.height = 400
+    canvas.height = 320 // Square fallback
     const ctx = canvas.getContext('2d')
     
     // Create different colors for each photo
@@ -77,14 +154,14 @@ function SimplePhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
     const color = colors[index % colors.length]
     
     ctx.fillStyle = color
-    ctx.fillRect(0, 0, 320, 400)
+    ctx.fillRect(0, 0, 320, 320)
     
     // Add loading text
     ctx.fillStyle = 'white'
     ctx.font = 'bold 18px Arial'
     ctx.textAlign = 'center'
-    ctx.fillText('Loading...', 160, 180)
-    ctx.fillText(`Photo ${index + 1}`, 160, 220)
+    ctx.fillText('Loading...', 160, 140)
+    ctx.fillText(`Photo ${index + 1}`, 160, 180)
     
     return new THREE.CanvasTexture(canvas)
   }, [index])
@@ -145,6 +222,7 @@ function SimplePhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
       side: THREE.DoubleSide,
       depthTest: true,
       depthWrite: false,
+      blending: THREE.NormalBlending,
       uniforms: {
         iTime: { value: 0 },
         iResolution: { value: new THREE.Vector3(window.innerWidth, window.innerHeight, 1) },
@@ -154,7 +232,8 @@ function SimplePhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
         uRotation: { value: 0 },
         uScale: { value: 1 },
         uOpacity: { value: 1 },
-        uTintColor: { value: new THREE.Color("#a5a5a5") }
+        uTintColor: { value: new THREE.Color("#a5a5a5") },
+        uDissolveProgress: { value: 0 }
       }
     })
   }, [fallbackTexture])
@@ -167,11 +246,11 @@ function SimplePhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
     }
   }, [texture, material])
   
-  // Set tint color variation based on index (like kokomi example)
+  // Set tint color variation based on index (lighter for more emissive look)
   useEffect(() => {
     if (material && material.uniforms) {
-      // Use the kokomi.js standard tint color
-      material.uniforms.uTintColor.value = new THREE.Color("#a5a5a5")
+      // Use a lighter tint color for more brightness
+      material.uniforms.uTintColor.value = new THREE.Color("#d0d0d0") // Lighter gray
     }
   }, [material, index])
   
@@ -211,20 +290,31 @@ function SimplePhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
     const opacityPoint = new THREE.Vector2()
     opacityCurve.getPointAt(i, opacityPoint)
     material.uniforms.uOpacity.value = opacityPoint.y
+    
+    // Calculate dissolve progress based on position along curve
+    // Start dissolving when approaching the center (last 15% of the curve)
+    const dissolveStart = 0.85
+    if (i2 > dissolveStart) {
+      const dissolveRange = 1.0 - dissolveStart
+      const dissolveProgress = (i2 - dissolveStart) / dissolveRange
+      material.uniforms.uDissolveProgress.value = Math.max(0, dissolveProgress) // Ensure never negative
+    } else {
+      material.uniforms.uDissolveProgress.value = 0 // Completely off when not dissolving
+    }
   })
   
-  // Calculate geometry size based on texture (75% of kokomi size)
+  // Calculate geometry size (square at 75% of kokomi size)
   const geometrySize = useMemo(() => {
     if (imageLoaded && imageTexture) {
-      // Use actual image dimensions with 75% of kokomi scaling
-      const width = imageTexture.image.width * 0.005 * 0.75
-      const height = imageTexture.image.height * 0.005 * 0.75
-      return [width, height]
+      // Make square based on smaller dimension at 75% of kokomi size
+      const originalWidth = imageTexture.image.width * 0.004
+      const originalHeight = imageTexture.image.height * 0.004
+      const squareSize = Math.min(originalWidth, originalHeight) * 0.75
+      return [squareSize, squareSize]
     } else {
-      // Use fallback dimensions (320x400 ratio) with 75% of kokomi scaling
-      const width = 320 * 0.005 * 0.75
-      const height = 400 * 0.005 * 0.75
-      return [width, height]
+      // Square fallback at 75% of kokomi size
+      const squareSize = 320 * 0.005 * 0.75
+      return [squareSize, squareSize]
     }
   }, [imageLoaded, imageTexture])
 
@@ -238,6 +328,9 @@ function SimplePhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
 // Simple Photo Spiral
 export default function PhotoSpiralSimple({ images = [], speed = 1 }) {
   const groupRef = useRef()
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
+  const targetRotation = useRef({ x: 0, y: 0 })
+  const currentRotation = useRef({ x: 0, y: 0 })
   
   // 3D curve inspired by the kokomi example (original)
   const curve = useMemo(() => {
@@ -304,12 +397,41 @@ export default function PhotoSpiralSimple({ images = [], speed = 1 }) {
     return instances
   }, [])
   
-  // Static - no rotation
-  // useFrame((state) => {
-  //   if (groupRef.current) {
-  //     groupRef.current.rotation.y = state.clock.elapsedTime * 0.1
-  //   }
-  // })
+  // Mouse movement tracking
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      // Normalize mouse position to -1 to 1
+      const x = (e.clientX / window.innerWidth) * 2 - 1
+      const y = -(e.clientY / window.innerHeight) * 2 + 1
+      setMousePosition({ x, y })
+      
+      // Update target rotation (more subtle than particle system)
+      targetRotation.current = {
+        x: y * 0.1, // Vertical mouse = X rotation (50% less)
+        y: x * 0.15  // Horizontal mouse = Y rotation (50% less)
+      }
+    }
+    
+    window.addEventListener('mousemove', handleMouseMove)
+    return () => window.removeEventListener('mousemove', handleMouseMove)
+  }, [])
+  
+  // Animate rotation based on mouse (like particle system)
+  useFrame(() => {
+    if (groupRef.current) {
+      // Smooth rotation lerp
+      currentRotation.current.x += (targetRotation.current.x - currentRotation.current.x) * 0.1
+      currentRotation.current.y += (targetRotation.current.y - currentRotation.current.y) * 0.1
+      
+      // Apply rotation to group
+      groupRef.current.rotation.x = currentRotation.current.x
+      groupRef.current.rotation.y = currentRotation.current.y
+      
+      // Also add position offset based on mouse (more subtle)
+      groupRef.current.position.x = mousePosition.x * 0.25 // 50% less movement
+      groupRef.current.position.y = mousePosition.y * 0.15 // 50% less movement
+    }
+  })
   
   const spiralCount = 5 // 5 streams like the kokomi example
   
