@@ -167,31 +167,44 @@ const vertexShader = `
         
         vec3 morphedPosition = mix(currentPos, targetPos, uMorphProgress);
         
-        // Sphere transformation
+        // Vacuum/Suction effect - particles get sucked backwards
         if (uCircleMorphProgress > 0.0) {
-            // Fibonacci sphere distribution for even spacing
+            // Each particle has a unique random factor for varied suction timing
             float particleId = aCharIndex + aRandom * 100.0;
-            float goldenRatio = (1.0 + sqrt(5.0)) / 2.0;
-            float i = particleId;
-            float theta = 2.0 * 3.14159265359 * i / goldenRatio;
-            float phi = acos(1.0 - 2.0 * mod(i * 0.001, 1.0));
             
-            // Base sphere radius
-            float baseRadius = 7.0;
+            // Random delay for each particle (0 to 1) - longer stagger for slower effect
+            float suctionDelay = fract(sin(particleId * 12.9898) * 43758.5453);
             
-            // Add some variation for organic look
-            float radiusVariation = sin(particleId * 7.0) * 0.4 + cos(particleId * 13.0) * 0.2;
-            float radius = baseRadius + radiusVariation;
+            // Adjusted progress with longer delay for staggered effect (50% instead of 30%)
+            float adjustedProgress = max(0.0, (uCircleMorphProgress - suctionDelay * 0.5) / (1.0 - suctionDelay * 0.5));
+            adjustedProgress = smoothstep(0.0, 1.0, adjustedProgress);
             
-            // Convert spherical to cartesian coordinates
-            vec3 spherePos = vec3(
-                radius * sin(phi) * cos(theta),
-                radius * sin(phi) * sin(theta),
-                radius * cos(phi)
+            // Suction target position (far behind camera)
+            float suctionDistance = 50.0 + aRandom * 30.0; // Random distance 50-80 units back
+            
+            // Random angle for dispersed suction pattern
+            float angle = aRandom * 6.28318530718; // 2π radians
+            float suctionRadius = 2.0 + aRandom * 3.0; // Small random spread
+            
+            vec3 suctionTarget = vec3(
+                cos(angle) * suctionRadius,
+                sin(angle) * suctionRadius,
+                -suctionDistance // Negative Z = behind camera
             );
             
-            // Smooth transition to sphere
-            morphedPosition = mix(morphedPosition, spherePos, uCircleMorphProgress);
+            // Gentler acceleration curve - more gradual buildup
+            float suctionCurve = pow(adjustedProgress, 2.0); // Quadratic instead of cubic for smoother acceleration
+            
+            // Apply suction transformation
+            morphedPosition = mix(morphedPosition, suctionTarget, suctionCurve);
+            
+            // Add gentler spiral motion during suction for more dynamic effect
+            if (adjustedProgress > 0.1) {
+                float spiralTime = adjustedProgress * 5.0; // Slower spiral: 10.0 -> 5.0
+                float spiralRadius = (1.0 - adjustedProgress) * 1.5; // Smaller radius: 2.0 -> 1.5
+                morphedPosition.x += cos(spiralTime + particleId) * spiralRadius * 0.3; // Less intensity: 0.5 -> 0.3
+                morphedPosition.y += sin(spiralTime + particleId) * spiralRadius * 0.3;
+            }
         }
         
         // Stuur world position door naar fragment shader
@@ -311,7 +324,37 @@ const fragmentShader = `
         // Normale glow voor alle particles
         finalColor *= 1.2;
         
-        gl_FragColor = vec4(finalColor, charColor.a * flickerAmount);
+        // Suction fade effect - particles fade as they get sucked away
+        float finalAlpha = charColor.a * flickerAmount;
+        
+        if (uCircleMorphProgress > 0.0) {
+            // Calculate distance from camera (negative Z = behind camera)
+            float distanceFromCamera = length(vWorldPosition);
+            
+            // Fade based on suction progress and distance
+            float suctionFade = 1.0;
+            
+            // Start fading when particles move behind camera (negative Z)
+            if (vWorldPosition.z < 0.0) {
+                // More dramatic fade for particles further back
+                float fadeDistance = abs(vWorldPosition.z) / 50.0; // Normalize by max suction distance
+                suctionFade = 1.0 - smoothstep(0.0, 1.0, fadeDistance);
+            }
+            
+            // Also fade based on overall suction progress - later fade start for smoother effect
+            float progressFade = 1.0 - smoothstep(0.5, 1.0, uCircleMorphProgress); // Start fade later: 0.3 -> 0.5
+            
+            // Combine both fades
+            finalAlpha *= suctionFade * progressFade;
+            
+            // Add some extra glow during suction for dramatic effect
+            if (uCircleMorphProgress > 0.1 && uCircleMorphProgress < 0.7) {
+                float glowBoost = sin(uCircleMorphProgress * 3.14159) * 0.5;
+                finalColor *= (1.0 + glowBoost);
+            }
+        }
+        
+        gl_FragColor = vec4(finalColor, finalAlpha);
     }
 `
 
@@ -522,9 +565,9 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
     const currentRotationRef = useRef({ x: 0, y: 0 })
     const dragStartPos = useRef({ x: 0, y: 0 })
     
-    // Detect mobile for camera distance
+    // Detect mobile for camera distance (5% dichterbij)
     const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
-    const initialZ = isMobile ? 12 : 10
+    const initialZ = isMobile ? 11.4 : 9.5 // 12*0.95=11.4, 10*0.95=9.5
     
     // Load all models
     const hd = useGLTF(MODELS[0].path)
@@ -890,7 +933,7 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
             ease: "back.out(1.7)"
         })
         
-        // Morph to sphere
+        // Start vacuum/suction effect - particles get sucked backwards (faster out)
         if (materialRef.current) {
             if (circleMorphTweenRef.current) {
                 circleMorphTweenRef.current.kill()
@@ -898,7 +941,7 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
             
             circleMorphTweenRef.current = gsap.to(materialRef.current.uniforms.uCircleMorphProgress, {
                 value: 1,
-                duration: 0.8,
+                duration: 1.6, // Iets sneller weggaan: 2.4 -> 1.6 seconds 
                 ease: "power2.inOut"
             })
         }
@@ -922,7 +965,7 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
             }
         })
         
-        // Morph back to selected model
+        // Stop suction effect - particles return to model shape (slow return)
         if (materialRef.current) {
             if (circleMorphTweenRef.current) {
                 circleMorphTweenRef.current.kill()
@@ -930,7 +973,7 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
             
             circleMorphTweenRef.current = gsap.to(materialRef.current.uniforms.uCircleMorphProgress, {
                 value: 0,
-                duration: 0.6,
+                duration: 1.8, // 3x slower: 0.6 * 3 = 1.8 seconds
                 ease: "power2.inOut"
             })
         }
@@ -1259,61 +1302,55 @@ function ScrollMorph3DUI() {
             }
             
             .model-menu-container {
-                background: rgba(0, 0, 0, 0.9);
-                border: 2px solid rgba(255, 255, 255, 0.3);
-                border-radius: 20px;
-                padding: 30px;
-                backdrop-filter: blur(20px);
-                min-width: 400px;
+                background: rgba(0, 0, 0, 0.8);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 12px;
+                padding: 20px;
+                backdrop-filter: blur(15px);
+                min-width: 200px;
             }
             
-            .model-menu-title {
-                color: rgba(255, 255, 255, 0.9);
-                font-size: 20px;
-                font-weight: 600;
-                text-align: center;
-                margin-bottom: 20px;
-                font-family: 'Courier New', monospace;
-            }
-            
-            .model-grid {
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 15px;
+            .model-list {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
             }
             
             .model-option {
-                background: rgba(255, 255, 255, 0.1);
-                border: 2px solid rgba(255, 255, 255, 0.2);
-                border-radius: 15px;
-                padding: 20px;
-                color: rgba(255, 255, 255, 0.8);
+                background: transparent;
+                border: none;
+                border-radius: 8px;
+                padding: 12px 16px;
+                color: rgba(255, 255, 255, 0.7);
                 font-family: 'Courier New', monospace;
-                font-size: 16px;
-                font-weight: 600;
-                text-align: center;
+                font-size: 14px;
+                font-weight: 500;
+                text-align: left;
                 cursor: pointer;
-                transition: all 0.3s ease;
+                transition: all 0.2s ease;
                 user-select: none;
+                border: 1px solid transparent;
             }
             
             .model-option:hover {
-                background: rgba(255, 255, 255, 0.2);
-                border-color: rgba(255, 255, 255, 0.5);
-                transform: scale(1.05);
+                background: rgba(255, 255, 255, 0.1);
+                color: rgba(255, 255, 255, 0.9);
+                border-color: rgba(255, 255, 255, 0.2);
+                transform: translateX(4px);
             }
             
             .model-option.selected {
-                background: rgba(100, 200, 255, 0.3);
-                border-color: rgba(100, 200, 255, 0.8);
+                background: rgba(255, 255, 255, 0.15);
                 color: rgba(255, 255, 255, 1);
-                box-shadow: 0 0 20px rgba(100, 200, 255, 0.5);
+                border-color: rgba(255, 255, 255, 0.4);
+                font-weight: 600;
             }
             
             .model-option.drag-over {
-                background: rgba(100, 255, 100, 0.3);
-                border-color: rgba(100, 255, 100, 0.8);
-                transform: scale(1.1);
+                background: rgba(100, 255, 100, 0.2);
+                color: rgba(255, 255, 255, 1);
+                border-color: rgba(100, 255, 100, 0.6);
+                transform: translateX(8px);
             }
             
             @keyframes float {
@@ -1384,24 +1421,11 @@ function ScrollMorph3DUI() {
         menu.id = 'model-menu'
         menu.innerHTML = `
             <div class="model-menu-container">
-                <div class="model-menu-title">Select Model</div>
-                <div class="model-grid">
-                    <div class="model-option" data-model="0">
-                        <div>HD</div>
-                        <small>Minimal Design</small>
-                    </div>
-                    <div class="model-option" data-model="1">
-                        <div>MAE</div>
-                        <small>Classic Style</small>
-                    </div>
-                    <div class="model-option" data-model="2">
-                        <div>OMNI</div>
-                        <small>Universal Form</small>
-                    </div>
-                    <div class="model-option" data-model="3">
-                        <div>WALTERS</div>
-                        <small>Signature Collection</small>
-                    </div>
+                <div class="model-list">
+                    <div class="model-option" data-model="2">Omni</div>
+                    <div class="model-option" data-model="0">Heerlen</div>
+                    <div class="model-option" data-model="3">Walters</div>
+                    <div class="model-option" data-model="1">Move Adapt Evolve</div>
                 </div>
             </div>
         `

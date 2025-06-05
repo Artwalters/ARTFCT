@@ -672,8 +672,8 @@ export default function PhotoSpiralCosmos({ images = [], speed = 1, onLongHoldPr
     
     // Enhanced camera controls (like Cosmos)
     useEffect(() => {
-        // Set initial camera position with better defaults
-        camera.position.set(0, 0, 8)
+        // Set initial camera position with better defaults (5% dichterbij)
+        camera.position.set(0, 0, 7.6) // 8 * 0.95 = 5% dichterbij
         camera.lookAt(0, 0, 0)
     }, [camera])
     
