@@ -5,11 +5,10 @@ import { useNavigate } from 'react-router-dom'
 import * as THREE from 'three'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
-import { ScrollToPlugin } from 'gsap/ScrollToPlugin'
 import PhotoSpiral from './PhotoSpiral'
 import { MODELS_3D as MODELS, projects } from '../../data/projects'
 
-gsap.registerPlugin(ScrollTrigger, ScrollToPlugin)
+gsap.registerPlugin(ScrollTrigger)
 
 // Karakters die we gaan gebruiken voor de particles
 const CODE_CHARACTERS = [
@@ -530,7 +529,7 @@ function sampleGeometryToPoints(geometry, targetCount, scale = 1) {
     return new Float32Array(positions)
 }
 
-function ScrollMorph3DParticles({ particleCount = 25000, onModelChange }) {
+function ScrollMorph3DParticles({ particleCount = 25000, onModelChange, photoSpiralRef }) {
     const meshRef = useRef()
     const materialRef = useRef()
     const [modelsLoaded, setModelsLoaded] = useState(false)
@@ -797,107 +796,118 @@ function ScrollMorph3DParticles({ particleCount = 25000, onModelChange }) {
         }
     }, [updateColors])
     
+    // Simplified reset function - no longer needed with wheel navigation
     const resetToStart = useCallback(() => {
-        const scrollContainer = document.getElementById('scroll-wrapper')
-        if (scrollContainer) {
-            scrollContainer.style.overflow = 'hidden'
-            scrollContainer.scrollTop = 0
-            setTimeout(() => {
-                scrollContainer.style.overflow = 'auto'
-            }, 100)
-        } else {
-            window.scrollTo(0, 0)
-        }
+        // Reset any remaining scroll progress
         scrollProgressRef.current = 0
         
+        // Reset progress bar if it exists
         const progressBar = document.getElementById('progressBar')
         if (progressBar) {
             progressBar.style.height = "0%"
         }
-        
-        ScrollTrigger.refresh()
     }, [])
     
+    // New wheel-based navigation system
     useEffect(() => {
         if (!modelsLoaded) return
         
-        const initScrollTrigger = () => {
-            const scrollContainer = document.getElementById('scroll-wrapper')
+        let isTransitioning = false
+        let lastWheelTime = 0
+        const wheelCooldown = 1000 // 1 second cooldown between transitions
+        
+        const handleWheel = (e) => {
+            e.preventDefault()
             
-            ScrollTrigger.create({
-                trigger: scrollContainer ? ".scroll-content" : "body",
-                start: "top top",
-                end: "bottom bottom",
-                scrub: true,
-                scroller: scrollContainer || undefined,
-                onUpdate: (self) => {
-                    const progress = self.progress
-                    scrollProgressRef.current = progress
-                    
-                    if (scrollTimeoutRef.current) {
-                        clearTimeout(scrollTimeoutRef.current)
-                    }
-                    
-                    let morphProgress
-                    if (progress < 0.7) {
-                        morphProgress = progress * 0.2 / 0.7
-                    } else {
-                        morphProgress = 0.2 + ((progress - 0.7) / 0.3) * 0.8
-                    }
-                    animatedProgressRef.current = morphProgress
-                    
-                    if (materialRef.current) {
-                        materialRef.current.uniforms.uMorphProgress.value = morphProgress
-                    }
-                    
-                    const progressBar = document.getElementById('progressBar')
-                    if (progressBar) {
-                        progressBar.style.height = `${Math.round(progress * 100)}%`
-                    }
-                    
-                    if (progress >= 1.0 && !isTransitioningRef.current) {
-                        isTransitioningRef.current = true
-                        
-                        completeTransition()
-                        
-                        setTimeout(() => {
-                            resetToStart()
-                            setTimeout(() => {
-                                isTransitioningRef.current = false
-                            }, 500)
-                        }, 800)
-                    } else if (progress < 1.0 && progress > 0.02) {
-                        scrollTimeoutRef.current = setTimeout(() => {
-                            const scrollContainer = document.getElementById('scroll-wrapper')
-                            gsap.to(scrollContainer || window, {
-                                scrollTo: { y: 0 },
-                                duration: 1.5,
-                                ease: "power2.inOut"
-                            })
-                            
-                            const progressBar = document.getElementById('progressBar')
-                            if (progressBar) {
-                                gsap.to(progressBar.style, {
-                                    height: "0%",
-                                    duration: 1.5,
-                                    ease: "power2.inOut"
-                                })
-                            }
-                        }, 600)
-                    }
+            const currentTime = Date.now()
+            if (isTransitioning || currentTime - lastWheelTime < wheelCooldown) {
+                return
+            }
+            
+            lastWheelTime = currentTime
+            isTransitioning = true
+            
+            // Trigger PhotoSpiral speed burst
+            if (photoSpiralRef?.current?.triggerSpeedBurst) {
+                photoSpiralRef.current.triggerSpeedBurst()
+            }
+            
+            // Start vacuum/suction effect like long hold
+            if (materialRef.current) {
+                if (circleMorphTweenRef.current) {
+                    circleMorphTweenRef.current.kill()
                 }
-            })
-        }
-        
-        setTimeout(initScrollTrigger, 100)
-        
-        return () => {
-            ScrollTrigger.getAll().forEach(trigger => trigger.kill())
-            if (scrollTimeoutRef.current) {
-                clearTimeout(scrollTimeoutRef.current)
+                
+                circleMorphTweenRef.current = gsap.to(materialRef.current.uniforms.uCircleMorphProgress, {
+                    value: 1,
+                    duration: 1.6,
+                    ease: "power2.inOut",
+                    onComplete: () => {
+                        // Determine direction and target model
+                        let targetModel
+                        if (e.deltaY > 0) {
+                            // Scroll down - next model
+                            targetModel = (currentModelRef.current + 1) % MODELS.length
+                        } else {
+                            // Scroll up - previous model
+                            targetModel = (currentModelRef.current - 1 + MODELS.length) % MODELS.length
+                        }
+                        
+                        // Update to target model
+                        const oldModel = currentModelRef.current
+                        currentModelRef.current = targetModel
+                        
+                        // Update material uniforms
+                        if (materialRef.current) {
+                            materialRef.current.uniforms.uCurrentModel.value = targetModel
+                            materialRef.current.uniforms.uTargetModel.value = (targetModel + 1) % MODELS.length
+                            materialRef.current.uniforms.uMorphProgress.value = 0
+                        }
+                        
+                        // Update colors
+                        updateColors(targetModel)
+                        
+                        // Update UI
+                        const counter = document.getElementById('model-counter')
+                        if (counter) {
+                            counter.textContent = `Model ${targetModel + 1} / ${MODELS.length}: ${MODELS[targetModel].name}`
+                        }
+                        
+                        const projectButton = document.getElementById('view-project-button')
+                        if (projectButton) {
+                            projectButton.setAttribute('data-url', MODELS[targetModel].projectUrl)
+                        }
+                        
+                        // Notify parent about model change
+                        if (onModelChange) {
+                            onModelChange(targetModel)
+                        }
+                        
+                        // Reset PhotoSpiral IMMEDIATELY when particle return starts
+                        if (photoSpiralRef?.current?.resetSpiral) {
+                            photoSpiralRef.current.resetSpiral()
+                        }
+                        
+                        // Return particles to model shape
+                        gsap.to(materialRef.current.uniforms.uCircleMorphProgress, {
+                            value: 0,
+                            duration: 1.8,
+                            ease: "power2.inOut",
+                            onComplete: () => {
+                                isTransitioning = false
+                            }
+                        })
+                    }
+                })
             }
         }
-    }, [modelsLoaded, completeTransition, resetToStart])
+        
+        window.addEventListener('wheel', handleWheel, { passive: false })
+        
+        return () => {
+            window.removeEventListener('wheel', handleWheel)
+        }
+    }, [modelsLoaded, updateColors, onModelChange])
     
     // Show menu function
     const showMenu = useCallback(() => {
@@ -1214,29 +1224,6 @@ function ScrollMorph3DUI() {
                 z-index: 100;
             }
             
-            .progress-bar-container {
-                position: absolute;
-                top: 50%;
-                right: 30px;
-                transform: translateY(-50%);
-                width: 8px;
-                height: 200px;
-                background: rgba(20, 20, 20, 0.4);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 4px;
-                overflow: hidden;
-            }
-            
-            .progress-bar {
-                position: absolute;
-                bottom: 0;
-                left: 0;
-                width: 100%;
-                height: 0%;
-                background: linear-gradient(to top, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.4));
-                border-radius: 2px;
-                transition: height 0.05s ease-out;
-            }
             
             .model-counter {
                 position: absolute;
@@ -1253,7 +1240,7 @@ function ScrollMorph3DUI() {
                 backdrop-filter: blur(10px);
             }
             
-            .scroll-indicator {
+            .wheel-indicator {
                 position: absolute;
                 bottom: 30px;
                 left: 50%;
@@ -1384,17 +1371,13 @@ function ScrollMorph3DUI() {
         const ui = document.createElement('div')
         ui.className = 'scroll-morph-ui'
         ui.innerHTML = `
-            <div class="progress-bar-container">
-                <div class="progress-bar" id="progressBar"></div>
-            </div>
-            
             <div class="model-counter" id="model-counter">
                 Model 1 / 4: ${MODELS[0].name}
             </div>
             
-            <div class="scroll-indicator">
-                ↓ Scroll to morph between 3D models ↓<br>
-                <small>100% scroll = next model</small>
+            <div class="wheel-indicator">
+                ↑↓ Scroll wheel to navigate between models ↑↓<br>
+                <small>Seamless project switching</small>
             </div>
             
             <div class="hold-indicator">
@@ -1474,6 +1457,7 @@ export default function ParticleScene({ onSceneStart }) {
     
     const [showPhotoSpiral, setShowPhotoSpiral] = useState(false)
     const [currentModelIndex, setCurrentModelIndex] = useState(0)
+    const photoSpiralRef = useRef(null)
     
     useEffect(() => {
         const scrollContainer = document.getElementById('scroll-wrapper')
@@ -1513,10 +1497,12 @@ export default function ParticleScene({ onSceneStart }) {
                 <ScrollMorph3DParticles 
                     particleCount={particleCount} 
                     onModelChange={setCurrentModelIndex}
+                    photoSpiralRef={photoSpiralRef}
                 />
             </Suspense>
             {showPhotoSpiral && (
                 <PhotoSpiral 
+                    ref={photoSpiralRef}
                     images={photoImages} 
                     speed={1}
                     onLongHoldProgress={(progress) => {

@@ -21,10 +21,6 @@ export default function ProjectsOverview() {
           <ParticleScene />
         </Suspense>
       </Canvas>
-      {/* Scroll container for particle scene */}
-      <div className="scroll-wrapper active" id="scroll-wrapper">
-        <div className="scroll-content"></div>
-      </div>
     </>
   )
 }

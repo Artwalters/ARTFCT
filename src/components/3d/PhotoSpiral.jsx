@@ -1,4 +1,4 @@
-import { useRef, useMemo, useEffect, useState, useCallback } from 'react'
+import React, { useRef, useMemo, useEffect, useState, useCallback, useImperativeHandle } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import gsap from 'gsap'
@@ -431,7 +431,7 @@ function CosmosPhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
 }
 
 // Enhanced PhotoSpiral with Cosmos features and Long Hold
-export default function PhotoSpiralCosmos({ images = [], speed = 1, onLongHoldProgress }) {
+const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHoldProgress }, ref) => {
     const groupRef = useRef()
     const { camera } = useThree()
     const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
@@ -459,6 +459,50 @@ export default function PhotoSpiralCosmos({ images = [], speed = 1, onLongHoldPr
         mouseSpeedMultiplier: 0,
         cameraMultiplier: 0
     })
+    
+    // Expose methods for external control (wheel navigation)
+    useImperativeHandle(ref, () => ({
+        triggerSpeedBurst: () => {
+            console.log('🚀 PhotoSpiral: External speed burst triggered!')
+            setIsLongHoldActive(true)
+            
+            // EXACT SAME TIMING AS PARTICLE VACUUM: 1.6 seconds with power2.inOut
+            gsap.to(tweenParams.current, {
+                speedMultiplier: 0.05,
+                opacityMultiplier: 0,
+                groupScale: 0,
+                duration: 1.6,  // Same as particle vacuum
+                ease: "power2.inOut"  // Same easing as particle vacuum
+            })
+            
+            // Pause exactly when particle vacuum completes
+            speedBurstTimeoutRef.current = setTimeout(() => {
+                setIsPaused(true)
+                tweenParams.current.speedMultiplier = 0
+            }, 1600)  // Match 1.6 second duration
+        },
+        
+        resetSpiral: () => {
+            console.log('🔄 PhotoSpiral: External reset triggered!')
+            setIsLongHoldActive(false)
+            setIsPaused(false)
+            
+            // EXACT SAME TIMING AS PARTICLE RETURN: 1.8 seconds with power2.inOut
+            gsap.to(tweenParams.current, {
+                speedMultiplier: 0,
+                opacityMultiplier: 1,
+                groupScale: 1,
+                duration: 1.8,  // Same as particle return
+                ease: "power2.inOut"  // Same easing as particle return
+            })
+            
+            // Clear any pending timeout
+            if (speedBurstTimeoutRef.current) {
+                clearTimeout(speedBurstTimeoutRef.current)
+                speedBurstTimeoutRef.current = null
+            }
+        }
+    }), [tweenParams])
     
     // 3D curve (same as original)
     const curve = useMemo(() => {
@@ -750,4 +794,6 @@ export default function PhotoSpiralCosmos({ images = [], speed = 1, onLongHoldPr
             ))}
         </group>
     )
-}
+})
+
+export default PhotoSpiralCosmos
