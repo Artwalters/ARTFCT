@@ -13,9 +13,11 @@ export const projects = {
       'WebGL implementation'
     ],
     images: [
-      '/placeholder1.jpg',
-      '/placeholder2.jpg',
-      '/placeholder3.jpg'
+      'img/hd/photo1.png',
+      'img/hd/photo2.png',
+      'img/hd/photo3.png',
+      'img/hd/photo4.png',
+      'img/hd/photo5.png'
     ]
   },
   mae: {
@@ -32,9 +34,9 @@ export const projects = {
       'Performance optimization'
     ],
     images: [
-      '/placeholder1.jpg',
-      '/placeholder2.jpg',
-      '/placeholder3.jpg'
+      'img/mae/photo1.png',
+      'img/mae/photo2.png',
+      'img/mae/photo3.png'
     ]
   },
   omni: {
@@ -51,9 +53,9 @@ export const projects = {
       'User interaction design'
     ],
     images: [
-      '/placeholder1.jpg',
-      '/placeholder2.jpg',
-      '/placeholder3.jpg'
+      'img/omni/photo1.png',
+      'img/omni/photo2.png',
+      'img/omni/photo3.png'
     ]
   },
   walters: {
@@ -70,16 +72,16 @@ export const projects = {
       'Cross-platform optimization'
     ],
     images: [
-      '/placeholder1.jpg',
-      '/placeholder2.jpg',
-      '/placeholder3.jpg'
+      'img/walters/photo1.png',
+      'img/walters/photo2.png',
+      'img/walters/photo3.png'
     ]
   }
 }
 
 export const MODELS_3D = [
-  { name: 'HD', path: './hd.glb', color: 0x00CED1, scale: 50.0, projectUrl: '/project/hd' },
-  { name: 'Mae', path: './mae.glb', color: 0xFF69B4, scale: 50.0, projectUrl: '/project/mae' },
-  { name: 'Omni', path: './omni.glb', color: 0xFFD700, scale: 50.0, projectUrl: '/project/omni' },
-  { name: 'Walters', path: './walters.glb', color: 0x32CD32, scale: 50.0, projectUrl: '/project/walters' }
+  { name: 'HD', path: './hd.glb', color: 0x00CED1, scale: 50.0, projectUrl: '/project/hd', projectId: 'hd' },
+  { name: 'Mae', path: './mae.glb', color: 0xFF69B4, scale: 50.0, projectUrl: '/project/mae', projectId: 'mae' },
+  { name: 'Omni', path: './omni.glb', color: 0xFFD700, scale: 50.0, projectUrl: '/project/omni', projectId: 'omni' },
+  { name: 'Walters', path: './walters.glb', color: 0x32CD32, scale: 50.0, projectUrl: '/project/walters', projectId: 'walters' }
 ]

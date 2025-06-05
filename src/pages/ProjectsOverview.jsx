@@ -10,8 +10,8 @@ export default function ProjectsOverview() {
       <Canvas
         shadows
         camera={{
-          fov: 60,
-          near: 0.2,
+          fov: 65,
+          near: 0.25,
           far: 100,
           position: [0, 0, /Android|iPhone|iPad/i.test(navigator.userAgent) ? 12.6 : 10.5]
         }}

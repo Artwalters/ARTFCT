@@ -232,21 +232,21 @@ function CosmosPhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
     // Create fallback colored texture
     const fallbackTexture = useMemo(() => {
         const canvas = document.createElement('canvas')
-        canvas.width = 320
-        canvas.height = 320
+        canvas.width = 400   // 5:4 aspect ratio fallback
+        canvas.height = 320  // 5:4 ratio (400/320 = 1.25 = 5:4)
         const ctx = canvas.getContext('2d')
         
         const colors = ['#ff6600', '#ff0066', '#6600ff', '#00ff66', '#ffff00', '#00ffff', '#ff00ff', '#888888']
         const color = colors[index % colors.length]
         
         ctx.fillStyle = color
-        ctx.fillRect(0, 0, 320, 320)
+        ctx.fillRect(0, 0, 400, 320)
         
         ctx.fillStyle = 'white'
         ctx.font = 'bold 18px Arial'
         ctx.textAlign = 'center'
-        ctx.fillText('Loading...', 160, 140)
-        ctx.fillText(`Photo ${index + 1}`, 160, 180)
+        ctx.fillText('Loading...', 200, 140)   // Center in 5:4 canvas
+        ctx.fillText(`Photo ${index + 1}`, 200, 180)
         
         return new THREE.CanvasTexture(canvas)
     }, [index])
@@ -266,6 +266,24 @@ function CosmosPhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
                         texture.wrapS = THREE.ClampToEdgeWrapping
                         texture.wrapT = THREE.ClampToEdgeWrapping
                         texture.flipY = false
+                        
+                        // Prevent squeezing by maintaining aspect ratio
+                        const imageAspect = texture.image.width / texture.image.height
+                        const targetAspect = 5 / 4 // Our target 5:4 aspect ratio
+                        
+                        // Calculate UV offset and scale to maintain aspect ratio
+                        if (imageAspect > targetAspect) {
+                          // Image is wider than target - fit height, crop sides
+                          const scale = targetAspect / imageAspect
+                          texture.offset.set((1 - scale) / 2, 0)
+                          texture.repeat.set(scale, 1)
+                        } else {
+                          // Image is taller than target - fit width, crop top/bottom
+                          const scale = imageAspect / targetAspect
+                          texture.offset.set(0, (1 - scale) / 2)
+                          texture.repeat.set(1, scale)
+                        }
+                        
                         setImageTexture(texture)
                         setImageLoaded(true)
                     }
@@ -394,18 +412,16 @@ function CosmosPhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
         }
     })
     
-    // Calculate geometry size
+    // Calculate geometry size - fixed rectangular aspect ratio like Omni images
     const geometrySize = useMemo(() => {
-        if (imageLoaded && imageTexture) {
-            const originalWidth = imageTexture.image.width * 0.004
-            const originalHeight = imageTexture.image.height * 0.004
-            const squareSize = Math.min(originalWidth, originalHeight) * 0.75
-            return [squareSize, squareSize]
-        } else {
-            const squareSize = 320 * 0.005 * 0.75
-            return [squareSize, squareSize]
-        }
-    }, [imageLoaded, imageTexture])
+        // Fixed rectangular dimensions in 5:4 aspect ratio
+        // Using 5:4 aspect ratio (1.25:1) - slightly wider than square
+        const baseWidth = 1.25  // 5:4 aspect ratio width (5/4 = 1.25)
+        const baseHeight = 1.0  // 5:4 aspect ratio height (4/4 = 1.0)
+        const scale = 1.08      // 44% larger total: 0.75 * 1.2 * 1.2 = 1.08
+        
+        return [baseWidth * scale, baseHeight * scale]
+    }, [])
 
     return (
         <mesh ref={meshRef} material={material} renderOrder={-1}>

@@ -7,7 +7,7 @@ import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { ScrollToPlugin } from 'gsap/ScrollToPlugin'
 import PhotoSpiral from './PhotoSpiral'
-import { MODELS_3D as MODELS } from '../../data/projects'
+import { MODELS_3D as MODELS, projects } from '../../data/projects'
 
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin)
 
@@ -530,7 +530,7 @@ function sampleGeometryToPoints(geometry, targetCount, scale = 1) {
     return new Float32Array(positions)
 }
 
-function ScrollMorph3DParticles({ particleCount = 25000 }) {
+function ScrollMorph3DParticles({ particleCount = 25000, onModelChange }) {
     const meshRef = useRef()
     const materialRef = useRef()
     const [modelsLoaded, setModelsLoaded] = useState(false)
@@ -789,6 +789,11 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
         const projectButton = document.getElementById('view-project-button')
         if (projectButton) {
             projectButton.setAttribute('data-url', MODELS[nextCurrent].projectUrl)
+        }
+        
+        // Notify parent component about model change
+        if (onModelChange) {
+            onModelChange(nextCurrent)
         }
     }, [updateColors])
     
@@ -1073,6 +1078,11 @@ function ScrollMorph3DParticles({ particleCount = 25000 }) {
                 const projectButton = document.getElementById('view-project-button')
                 if (projectButton) {
                     projectButton.setAttribute('data-url', MODELS[selectedIndex].projectUrl)
+                }
+                
+                // Notify parent component about model change
+                if (onModelChange) {
+                    onModelChange(selectedIndex)
                 }
             }
             
@@ -1463,6 +1473,7 @@ export default function ParticleScene({ onSceneStart }) {
     }, [])
     
     const [showPhotoSpiral, setShowPhotoSpiral] = useState(false)
+    const [currentModelIndex, setCurrentModelIndex] = useState(0)
     
     useEffect(() => {
         const scrollContainer = document.getElementById('scroll-wrapper')
@@ -1488,17 +1499,21 @@ export default function ParticleScene({ onSceneStart }) {
         }, 1000)
     }, [onSceneStart, particleCount])
     
-    // Photo images - PNG files from public/img folder
-    const photoImages = [
-        'img/photo1.png',  // Correct path relative to public folder
-        'img/photo2.png',  // Correct path relative to public folder
-        'img/photo3.png'   // Correct path relative to public folder
-    ]
+    // Photo images - dynamically determined based on current model
+    const photoImages = useMemo(() => {
+        const currentModel = MODELS[currentModelIndex]
+        const projectId = currentModel?.projectId || 'hd'
+        const project = projects[projectId]
+        return project?.images || []
+    }, [currentModelIndex])
     
     return (
         <>
             <Suspense fallback={<LoadingFallback />}>
-                <ScrollMorph3DParticles particleCount={particleCount} />
+                <ScrollMorph3DParticles 
+                    particleCount={particleCount} 
+                    onModelChange={setCurrentModelIndex}
+                />
             </Suspense>
             {showPhotoSpiral && (
                 <PhotoSpiral 
