@@ -1,0 +1,157 @@
+html {
+    margin: 0;
+    padding: 0;
+    background: #000;
+    /* Fixed viewport to prevent browser bar hiding */
+    height: 100vh;
+    height: 100dvh; /* Dynamic viewport height */
+    position: fixed;
+    width: 100%;
+    overflow: hidden;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background: #000;
+    /* Fixed body to match html */
+    height: 100vh;
+    height: 100dvh;
+    position: fixed;
+    width: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    
+    /* Prevent pull-to-refresh on mobile */
+    overscroll-behavior-y: none;
+}
+
+/* More aggressive scrollbar hiding */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+}
+
+/* Safari iOS specific */
+body {
+    -webkit-overflow-scrolling: touch;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+}
+
+/* Global scrollbar hiding */
+*::-webkit-scrollbar {
+    display: none !important;
+}
+
+* {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+}
+
+#root
+{
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    background: transparent;
+    z-index: 1;
+}
+
+/* Scroll container for particle scene */
+.scroll-wrapper {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    z-index: 1000;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    display: none; /* Hidden by default */
+    /* Debug styling */
+    background: transparent;
+}
+
+/* Show when particles scene is active */
+.scroll-wrapper.active {
+    display: block;
+}
+
+/* Scrollable content */
+.scroll-content {
+    height: 500vh;
+    width: 100%;
+    /* This creates the scrollable area */
+}
+
+/* Hide scrollbar for scroll wrapper */
+.scroll-wrapper::-webkit-scrollbar {
+    display: none;
+}
+
+.scroll-wrapper {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+/* Header Styles */
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.header-section {
+  position: absolute;
+  display: flex;
+  gap: 20px;
+  pointer-events: auto;
+  color: white;
+  font-size: 14px;
+}
+
+.header-section a {
+  color: white;
+  text-decoration: none;
+  opacity: 0.8;
+  transition: opacity 0.3s;
+}
+
+.header-section a:hover {
+  opacity: 1;
+}
+
+.top-left {
+  top: 20px;
+  left: 20px;
+}
+
+.top-right {
+  top: 20px;
+  right: 20px;
+}
+
+.bottom-left {
+  bottom: 20px;
+  left: 20px;
+}
+
+.bottom-right {
+  bottom: 20px;
+  right: 20px;
+}
+

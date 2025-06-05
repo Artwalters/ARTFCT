@@ -1,8 +1,9 @@
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
-import LandingPage from './LandingPage'
-import ProjectsPage from './ProjectsPage'
-import ProjectPage from './ProjectPage'
+import Welcome from './pages/Welcome'
+import Landing from './pages/Landing'
+import ProjectsOverview from './pages/ProjectsOverview'
+import ProjectDetail from './pages/ProjectDetail'
 
 function AppContent() {
   const location = useLocation()
@@ -48,9 +49,10 @@ function AppContent() {
   
   return (
     <Routes>
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/projects" element={<ProjectsPage />} />
-      <Route path="/project/:projectId" element={<ProjectPage />} />
+      <Route path="/" element={<Welcome />} />
+      <Route path="/intro" element={<Landing />} />
+      <Route path="/projects" element={<ProjectsOverview />} />
+      <Route path="/project/:projectId" element={<ProjectDetail />} />
     </Routes>
   )
 }
