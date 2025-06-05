@@ -6,7 +6,7 @@ import * as THREE from 'three'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { ScrollToPlugin } from 'gsap/ScrollToPlugin'
-import PhotoSpiralSimple from './PhotoSpiralSimple'
+import PhotoSpiralCosmos from './PhotoSpiralCosmos'
 
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin)
 
@@ -1494,7 +1494,14 @@ export default function ScrollMorphScene3D({ onSceneStart }) {
                 <ScrollMorph3DParticles particleCount={particleCount} />
             </Suspense>
             {showPhotoSpiral && (
-                <PhotoSpiralSimple images={photoImages} speed={1} />
+                <PhotoSpiralCosmos 
+                    images={photoImages} 
+                    speed={1}
+                    onLongHoldProgress={(progress) => {
+                        // Optional: Handle long hold progress from PhotoSpiral
+                        console.log('PhotoSpiral long hold progress:', progress)
+                    }}
+                />
             )}
             <ScrollMorph3DUI />
         </>

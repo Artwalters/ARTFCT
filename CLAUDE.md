@@ -1,1 +1,2 @@
 - i will do the run dev command
+- mijn development server werkt in het begin. hier hoef je niets aan te doen. ik zal zelf mijn server starten en anapassingen maken. geef mij alleen instructies als er iets moet gebeuren.
