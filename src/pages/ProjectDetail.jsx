@@ -9,6 +9,8 @@ export default function ProjectDetail() {
 
   useEffect(() => {
     window.scrollTo(0, 0)
+    // Add class to identify project detail page for CSS
+    document.body.classList.add('project-detail-page')
     // Set normal scrollable layout for project detail pages
     document.body.style.background = '#000'
     document.body.style.position = 'static'
@@ -18,6 +20,7 @@ export default function ProjectDetail() {
     
     // Cleanup when component unmounts
     return () => {
+      document.body.classList.remove('project-detail-page')
       document.body.style.position = ''
       document.body.style.overflow = ''
       document.body.style.width = ''

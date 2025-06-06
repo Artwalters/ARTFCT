@@ -9,10 +9,12 @@
   top: 0;
   left: 0;
   width: 100%;
+  max-width: 100vw;
   height: auto;
   overflow-x: hidden;
   overflow-y: auto;
   z-index: 2000;
+  box-sizing: border-box;
 }
 
 .project-hero {
@@ -145,21 +147,52 @@
 
 /* Mobile responsive */
 @media (max-width: 768px) {
+  .project-page {
+    padding: 20px 15px;
+    width: 100vw;
+    max-width: 100vw;
+  }
+  
+  .project-hero {
+    margin-bottom: 40px;
+  }
+  
   .project-name {
-    font-size: 60px;
+    font-size: 48px;
     letter-spacing: -2px;
+    word-break: break-word;
+    hyphens: auto;
   }
   
   .project-title {
-    font-size: 24px;
+    font-size: 20px;
   }
   
   .project-description {
     font-size: 16px;
+    padding: 0 10px;
   }
   
   .project-info {
     flex-direction: column;
-    gap: 30px;
+    gap: 20px;
+    margin-bottom: 40px;
+  }
+  
+  .project-details {
+    margin-bottom: 40px;
+  }
+  
+  .project-details h3 {
+    font-size: 20px;
+  }
+  
+  .project-images {
+    margin-bottom: 40px;
+  }
+  
+  .nav-button {
+    padding: 12px 30px;
+    font-size: 14px;
   }
 }

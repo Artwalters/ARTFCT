@@ -152,8 +152,8 @@ body {
     -webkit-perspective: 1000;
   }
   
-  /* Prevent iOS bounce */
-  html, body {
+  /* Prevent iOS bounce only on projects overview page */
+  body.projects-overview-page {
     position: fixed;
     overflow: hidden;
     width: 100%;

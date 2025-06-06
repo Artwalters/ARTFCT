@@ -11,11 +11,14 @@ export default function ProjectsOverview() {
   const photoSpiralRef = useRef(null)
   
   useEffect(() => {
+    // Add class for iOS Safari fixes
+    document.body.classList.add('projects-overview-page')
     // Apply overflow hidden for this page only
     document.body.style.overflow = 'hidden'
     
     // Cleanup when component unmounts
     return () => {
+      document.body.classList.remove('projects-overview-page')
       document.body.style.overflow = ''
     }
   }, [])
