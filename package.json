@@ -1,9 +1,9 @@
 {
-  "name": "onemanarmy",
+  "name": "artfct",
   "private": false,
   "version": "1.0.0",
   "type": "module",
-  "homepage": "https://artwalters.github.io/OneManArmy",
+  "homepage": "https://artwalters.github.io/ARTFCT",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

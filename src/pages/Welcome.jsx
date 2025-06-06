@@ -31,7 +31,7 @@ export default function Welcome() {
         letterSpacing: '-3px',
         textAlign: 'center'
       }}>
-        ONE MAN ARMY
+        ARTFCT
       </h1>
       
       <p style={{

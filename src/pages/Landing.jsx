@@ -18,7 +18,7 @@ export default function Landing() {
         fontFamily: 'monospace',
         gap: '40px'
       }}>
-        <h1 style={{ margin: 0 }}>One Man Army</h1>
+        <h1 style={{ margin: 0 }}>ARTFCT</h1>
         <button 
           onClick={() => navigate('/projects')}
           style={{
