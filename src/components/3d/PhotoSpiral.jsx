@@ -451,13 +451,12 @@ function CosmosPhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
         }
     })
     
-    // Calculate geometry size - fixed rectangular aspect ratio like Omni images
+    // Calculate geometry size - vertical orientation, 20% larger
     const geometrySize = useMemo(() => {
-        // Fixed rectangular dimensions in 5:4 aspect ratio
-        // Using 5:4 aspect ratio (1.25:1) - slightly wider than square
-        const baseWidth = 1.25  // 5:4 aspect ratio width (5/4 = 1.25)
-        const baseHeight = 1.0  // 5:4 aspect ratio height (4/4 = 1.0)
-        const scale = 1.08      // 44% larger total: 0.75 * 1.2 * 1.2 = 1.08
+        // Vertical orientation (portrait)
+        const baseWidth = 1.0   // Portrait width
+        const baseHeight = 1.25 // Portrait height (4:5 aspect ratio)
+        const scale = 1.30      // 20% larger: 1.08 * 1.2 = 1.296 ≈ 1.30
         
         return [baseWidth * scale, baseHeight * scale]
     }, [])
@@ -774,12 +773,7 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
         }
     }, [isLongHoldActive, onLongHoldProgress])
     
-    // Enhanced camera controls (like Cosmos)
-    useEffect(() => {
-        // Set initial camera position with better defaults (5% dichterbij)
-        camera.position.set(0, 0, 7.6) // 8 * 0.95 = 5% dichterbij
-        camera.lookAt(0, 0, 0)
-    }, [camera])
+    // No camera manipulation - use Canvas camera as-is
     
     // Cosmos-style camera animation
     useFrame((state, delta) => {

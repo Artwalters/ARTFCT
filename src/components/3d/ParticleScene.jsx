@@ -532,6 +532,7 @@ function sampleGeometryToPoints(geometry, targetCount, scale = 1) {
 function ScrollMorph3DParticles({ particleCount = 25000, onModelChange, photoSpiralRef }) {
     const meshRef = useRef()
     const materialRef = useRef()
+    const { camera } = useThree()
     const [modelsLoaded, setModelsLoaded] = useState(false)
     
     // Creëer character atlas een keer bij component mount
@@ -662,10 +663,10 @@ function ScrollMorph3DParticles({ particleCount = 25000, onModelChange, photoSpi
         // Use Mae as reference size
         const referenceSize = maeSize
         
-        const hdScale = (targetSize / hdSize) * MODELS[0].scale * 0.5  // HD is half size
-        const maeScale = (targetSize / maeSize) * MODELS[1].scale
-        const omniScale = (targetSize / omniSize) * MODELS[2].scale
-        const waltersScale = (targetSize / waltersSize) * MODELS[3].scale
+        const hdScale = (targetSize / hdSize) * MODELS[0].scale * 0.5 // HD is half size
+        const maeScale = (targetSize / maeSize) * MODELS[1].scale * 0.8 // HD is half size
+        const omniScale = (targetSize / omniSize) * MODELS[2].scale * 0.8 // HD is half size
+        const waltersScale = (targetSize / waltersSize) * MODELS[3].scale * 0.8 // HD is half size
         
         console.log('Model sizes:', { hdSize, maeSize, omniSize, waltersSize })
         console.log('Calculated scales:', { hdScale, maeScale, omniScale, waltersScale })
@@ -728,6 +729,7 @@ function ScrollMorph3DParticles({ particleCount = 25000, onModelChange, photoSpi
         setModelsLoaded(true)
         return geo
     }, [hd, mae, omni, walters, particleCount])
+    
     
     const material = useMemo(() => {
         return new THREE.ShaderMaterial({
@@ -1449,15 +1451,11 @@ MODELS.forEach(model => {
     useGLTF.preload(model.path)
 })
 
-export default function ParticleScene({ onSceneStart }) {
+export default function ParticleScene({ onModelChange, onReady, photoSpiralRef }) {
     const particleCount = useMemo(() => {
         const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
         return isMobile ? 2500 : 5000 // 1.25x meer particles
     }, [])
-    
-    const [showPhotoSpiral, setShowPhotoSpiral] = useState(false)
-    const [currentModelIndex, setCurrentModelIndex] = useState(0)
-    const photoSpiralRef = useRef(null)
     
     useEffect(() => {
         const scrollContainer = document.getElementById('scroll-wrapper')
@@ -1473,44 +1471,21 @@ export default function ParticleScene({ onSceneStart }) {
         }
         
         ScrollTrigger.refresh()
+        console.log(`ParticleScene initialized with ${particleCount} particles`)
         
-        if (onSceneStart) onSceneStart()
-        console.log(`ScrollMorphScene3D initialized with ${particleCount} particles and 3D models`)
-        
-        // Show photo spiral after 1 second
-        setTimeout(() => {
-            setShowPhotoSpiral(true)
-        }, 1000)
-    }, [onSceneStart, particleCount])
-    
-    // Photo images - dynamically determined based on current model
-    const photoImages = useMemo(() => {
-        const currentModel = MODELS[currentModelIndex]
-        const projectId = currentModel?.projectId || 'hd'
-        const project = projects[projectId]
-        return project?.images || []
-    }, [currentModelIndex])
+        // Notify parent when ready
+        if (onReady) onReady()
+    }, [onReady, particleCount])
     
     return (
         <>
             <Suspense fallback={<LoadingFallback />}>
                 <ScrollMorph3DParticles 
                     particleCount={particleCount} 
-                    onModelChange={setCurrentModelIndex}
+                    onModelChange={onModelChange}
                     photoSpiralRef={photoSpiralRef}
                 />
             </Suspense>
-            {showPhotoSpiral && (
-                <PhotoSpiral 
-                    ref={photoSpiralRef}
-                    images={photoImages} 
-                    speed={1}
-                    onLongHoldProgress={(progress) => {
-                        // Optional: Handle long hold progress from PhotoSpiral
-                        console.log('PhotoSpiral long hold progress:', progress)
-                    }}
-                />
-            )}
             <ScrollMorph3DUI />
         </>
     )
