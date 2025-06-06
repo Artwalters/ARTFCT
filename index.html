@@ -7,6 +7,18 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>ARTFCT - Digital Portfolio</title>
+    <script type="text/javascript">
+        // Single Page Application support for GitHub Pages
+        // Check if we were redirected from a 404 page and restore the URL
+        (function(l) {
+            if (l.search && l.search[1] === '#') {
+                var decoded = decodeURIComponent(l.search.slice(2));
+                window.history.replaceState(null, null,
+                    l.pathname.slice(0, -1) + decoded.split('&')[0] + l.hash
+                );
+            }
+        }(window.location))
+    </script>
   <script type="module" crossorigin src="/ARTFCT/assets/index-CpPNA699.js"></script>
   <link rel="stylesheet" crossorigin href="/ARTFCT/assets/index-BSyaE0Ir.css">
 </head>
