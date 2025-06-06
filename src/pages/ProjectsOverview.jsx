@@ -22,7 +22,7 @@ export default function ProjectsOverview() {
   
   // Simple camera setup - no complex config
   const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
-  const cameraPosition = [0, 0, isMobile ? 13.04 : 10.40]
+  const cameraPosition = [0, isMobile ? -0.5 : 0, isMobile ? 15.06 : 12.01] // 15% further away (13.69 * 1.1 = 15.06, 10.92 * 1.1 = 12.01)
   
   // Photo images based on current model
   const photoImages = useMemo(() => {

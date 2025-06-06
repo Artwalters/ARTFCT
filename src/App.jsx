@@ -9,6 +9,16 @@ function AppContent() {
   const location = useLocation()
   
   useEffect(() => {
+    // Mobile performance warning
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    if (isMobile) {
+      console.warn('Mobile device detected - running with reduced performance settings')
+      // Set mobile-specific CSS
+      document.documentElement.style.setProperty('--mobile-device', '1')
+    }
+  }, [])
+  
+  useEffect(() => {
     // Hide any lingering canvases when on project pages
     if (location.pathname.includes('/project/')) {
       document.body.style.overflow = 'auto'

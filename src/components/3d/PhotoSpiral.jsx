@@ -265,6 +265,9 @@ void main(){
                 float depthBrightness = 0.7 + depthScale * 0.3;
                 particleColor *= depthBrightness;
                 
+                // Make particles brighter to compensate for dark background
+                particleColor *= 2.5; // Extra bright particles (1.5 + 1.0 = 2.5x)
+                
                 // Smooth blending - eerst glow, dan overgang
                 float transitionProgress = smoothstep(0.0, 1.0, blockDissolveProgress);
                 
@@ -330,6 +333,9 @@ function CosmosPhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
     const [imageLoaded, setImageLoaded] = useState(false)
     const [imageTexture, setImageTexture] = useState(null)
     
+    // Detect mobile device for performance optimizations
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    
     // Create fallback colored texture
     const fallbackTexture = useMemo(() => {
         const canvas = document.createElement('canvas')
@@ -358,45 +364,65 @@ function CosmosPhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
             const loader = new THREE.TextureLoader()
             let cancelled = false
             
-            loader.load(
-                imageUrl,
-                (texture) => {
-                    if (!cancelled) {
-                        texture.minFilter = THREE.LinearFilter
-                        texture.magFilter = THREE.LinearFilter
-                        texture.wrapS = THREE.ClampToEdgeWrapping
-                        texture.wrapT = THREE.ClampToEdgeWrapping
-                        texture.flipY = false
-                        
-                        // Prevent squeezing by maintaining aspect ratio
-                        const imageAspect = texture.image.width / texture.image.height
-                        const targetAspect = 5 / 4 // Our target 5:4 aspect ratio
-                        
-                        // Calculate UV offset and scale to maintain aspect ratio
-                        if (imageAspect > targetAspect) {
-                          // Image is wider than target - fit height, crop sides
-                          const scale = targetAspect / imageAspect
-                          texture.offset.set((1 - scale) / 2, 0)
-                          texture.repeat.set(scale, 1)
-                        } else {
-                          // Image is taller than target - fit width, crop top/bottom
-                          const scale = imageAspect / targetAspect
-                          texture.offset.set(0, (1 - scale) / 2)
-                          texture.repeat.set(1, scale)
-                        }
-                        
-                        setImageTexture(texture)
-                        setImageLoaded(true)
-                    }
-                },
-                undefined,
-                (error) => {
-                    if (!cancelled) {
-                        console.warn(`Failed to load image: ${imageUrl}`, error)
-                        setImageLoaded(false)
-                    }
+            // Create smaller texture for mobile
+            const img = new Image()
+            img.crossOrigin = 'anonymous'
+            
+            img.onload = () => {
+                if (cancelled) return
+                
+                // Resize image for mobile performance
+                const maxSize = isMobile ? 512 : 1024
+                let width = img.width
+                let height = img.height
+                
+                if (width > maxSize || height > maxSize) {
+                    const scale = Math.min(maxSize / width, maxSize / height)
+                    width *= scale
+                    height *= scale
                 }
-            )
+                
+                const canvas = document.createElement('canvas')
+                canvas.width = width
+                canvas.height = height
+                const ctx = canvas.getContext('2d')
+                ctx.drawImage(img, 0, 0, width, height)
+                
+                const texture = new THREE.CanvasTexture(canvas)
+                texture.minFilter = THREE.LinearFilter
+                texture.magFilter = THREE.LinearFilter
+                texture.wrapS = THREE.ClampToEdgeWrapping
+                texture.wrapT = THREE.ClampToEdgeWrapping
+                texture.flipY = false
+                
+                // Calculate UV offset and scale to maintain aspect ratio
+                const imageAspect = texture.image.width / texture.image.height
+                const targetAspect = 5 / 4 // Our target 5:4 aspect ratio
+                
+                if (imageAspect > targetAspect) {
+                    // Image is wider than target - fit height, crop sides
+                    const scale = targetAspect / imageAspect
+                    texture.offset.set((1 - scale) / 2, 0)
+                    texture.repeat.set(scale, 1)
+                } else {
+                    // Image is taller than target - fit width, crop top/bottom
+                    const scale = imageAspect / targetAspect
+                    texture.offset.set(0, (1 - scale) / 2)
+                    texture.repeat.set(1, scale)
+                }
+                
+                setImageTexture(texture)
+                setImageLoaded(true)
+            }
+            
+            img.onerror = (error) => {
+                if (!cancelled) {
+                    console.warn(`Failed to load image: ${imageUrl}`, error)
+                    setImageLoaded(false)
+                }
+            }
+            
+            img.src = imageUrl
             
             return () => {
                 cancelled = true
@@ -428,7 +454,7 @@ function CosmosPhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
                 uRotation: { value: 0 },
                 uScale: { value: 1 },
                 uOpacity: { value: 1 },
-                uTintColor: { value: new THREE.Color("#d0d0d0") },
+                uTintColor: { value: new THREE.Color("#808080") }, // Darker tint for background effect
                 uDissolveProgress: { value: 0 },
                 uSpeedMultiplier: { value: 0 },
                 uMouseSpeedMultiplier: { value: 0 },
@@ -563,6 +589,9 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
     const targetRotation = useRef({ x: 0, y: 0 })
     const currentRotation = useRef({ x: 0, y: 0 })
     
+    // Detect mobile device for performance optimizations (early declaration)
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    
     // Create character atlas once
     const characterAtlas = useMemo(() => createCharacterAtlas(), [])
     
@@ -635,19 +664,21 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
         }
     }), [tweenParams])
     
-    // 3D curve (same as original)
+    // 3D curve (scaled down for mobile)
     const curve = useMemo(() => {
+        const scale = isMobile ? 0.8 : 1.0 // 20% smaller on mobile
+        
         const curvePoints = [
-            new THREE.Vector3(-7, -1, -8),
-            new THREE.Vector3(-6.8, -0.2, -7),
-            new THREE.Vector3(-6.4, 0.3, -6),
-            new THREE.Vector3(-5.9, 0.7, -5),
-            new THREE.Vector3(-5.4, 1, -4),
-            new THREE.Vector3(-4.8, 1.2, -3),
-            new THREE.Vector3(-3.9, 1.3, -1.8),
-            new THREE.Vector3(-2.8, 1, -1),
-            new THREE.Vector3(-1.5, 0.6, 0),
-            new THREE.Vector3(-1, 0.4, 0)
+            new THREE.Vector3(-7 * scale, -1 * scale, -8),
+            new THREE.Vector3(-6.8 * scale, -0.2 * scale, -7),
+            new THREE.Vector3(-6.4 * scale, 0.3 * scale, -6),
+            new THREE.Vector3(-5.9 * scale, 0.7 * scale, -5),
+            new THREE.Vector3(-5.4 * scale, 1 * scale, -4),
+            new THREE.Vector3(-4.8 * scale, 1.2 * scale, -3),
+            new THREE.Vector3(-3.9 * scale, 1.3 * scale, -1.8),
+            new THREE.Vector3(-2.8 * scale, 1 * scale, -1),
+            new THREE.Vector3(-1.5 * scale, 0.6 * scale, 0),
+            new THREE.Vector3(-1 * scale, 0.4 * scale, 0)
         ]
         
         const smoothCurve = new THREE.CatmullRomCurve3(curvePoints)
@@ -655,7 +686,7 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
         smoothCurve.tension = 0.5
         
         return smoothCurve
-    }, [])
+    }, [isMobile])
 
     // Curves (same as original)
     const rotationCurve = useMemo(() => {
@@ -685,7 +716,7 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
     
     // Photo instances met randomized volgorde
     const photoInstances = useMemo(() => {
-        const spiralImageCount = 10
+        const spiralImageCount = 10 // Same amount on all devices
         const instances = []
         
         // Randomize image indices voor organische volgorde
@@ -705,8 +736,11 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
         return instances
     }, [])
     
-    // Cosmos-style mouse tracking with drag detection
+    // Cosmos-style mouse tracking with drag detection (desktop only)
     useEffect(() => {
+        // Skip mouse events on mobile
+        if (isMobile) return
+        
         const handleMouseDown = (e) => {
             setMouseDown(true)
             startPoint.current = { x: e.clientX, y: e.clientY }
@@ -768,7 +802,7 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
             window.removeEventListener('mouseup', handleMouseUp)
             window.removeEventListener('mousemove', handleMouseMove)
         }
-    }, [mouseDown])
+    }, [mouseDown, isMobile])
     
     // Cosmos-style long hold integration with dramatic effects
     useEffect(() => {
@@ -872,30 +906,33 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
     
     // No camera manipulation - use Canvas camera as-is
     
-    // Cosmos-style camera animation
+    // Cosmos-style camera animation (desktop only)
     useFrame((state, delta) => {
         if (groupRef.current) {
-            // Smooth rotation lerp (like Cosmos)
-            currentRotation.current.x += (targetRotation.current.x - currentRotation.current.x) * 0.1
-            currentRotation.current.y += (targetRotation.current.y - currentRotation.current.y) * 0.1
+            // Only do mouse-based animations on desktop
+            if (!isMobile) {
+                // Smooth rotation lerp (like Cosmos)
+                currentRotation.current.x += (targetRotation.current.x - currentRotation.current.x) * 0.1
+                currentRotation.current.y += (targetRotation.current.y - currentRotation.current.y) * 0.1
+                
+                // Apply rotation to group
+                groupRef.current.rotation.x = currentRotation.current.x
+                groupRef.current.rotation.y = currentRotation.current.y
+                
+                // Cosmos-style position offset based on mouse
+                groupRef.current.position.x = mousePosition.x * 0.2
+                groupRef.current.position.y = mousePosition.y * 0.1
+                
+                // Gradually reduce camera multiplier (like Cosmos lerp)
+                tweenParams.current.cameraMultiplier *= 0.95
+            }
             
-            // Apply rotation to group
-            groupRef.current.rotation.x = currentRotation.current.x
-            groupRef.current.rotation.y = currentRotation.current.y
-            
-            // Cosmos-style position offset based on mouse
-            groupRef.current.position.x = mousePosition.x * 0.2
-            groupRef.current.position.y = mousePosition.y * 0.1
-            
-            // Apply group scaling
+            // Apply group scaling (both mobile and desktop)
             groupRef.current.scale.setScalar(tweenParams.current.groupScale)
         }
-        
-        // Gradually reduce camera multiplier (like Cosmos lerp)
-        tweenParams.current.cameraMultiplier *= 0.95
     })
     
-    const spiralCount = 5
+    const spiralCount = 5 // Always 5 spirals
     
     return (
         <group ref={groupRef} position={[0, 0, 5]} renderOrder={-1}>
@@ -909,8 +946,8 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
                             ? images[instance.index % images.length] 
                             : null
                         
-                        // Verschuif elke curve 2% voor organische dissolve timing
-                        const curveOffset = spiralIndex * 0.02 // 2% per curve
+                        // Verschuif elke curve voor organische dissolve timing
+                        const curveOffset = spiralIndex * 0.01 // 1% per curve
                         const adjustedOffset = (instance.offset + curveOffset) % 1.0
                         
                         return (

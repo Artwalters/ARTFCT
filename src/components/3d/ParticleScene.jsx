@@ -28,7 +28,8 @@ function createCharacterAtlas() {
     console.log('Creating character atlas with VS Code colors, version:', atlasVersion)
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')
-    const charSize = 64
+    const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
+    const charSize = isMobile ? 32 : 64 // Smaller texture on mobile
     const cols = 10
     const rows = Math.ceil(CODE_CHARACTERS.length / cols)
     
@@ -39,7 +40,8 @@ function createCharacterAtlas() {
     ctx.fillStyle = '#000000'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     
-    ctx.font = 'bold 48px monospace'
+    const fontSize = isMobile ? 24 : 48
+    ctx.font = `bold ${fontSize}px monospace`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     
@@ -234,7 +236,7 @@ const vertexShader = `
             size *= 1.5;
         }
         
-        gl_PointSize = size * (200.0 / -mvPosition.z);
+        gl_PointSize = size * (242.0 / -mvPosition.z); // 21% groter (220 * 1.1 = 242)
         
         gl_Position = projectionMatrix * mvPosition;
     }
@@ -585,7 +587,8 @@ function ScrollMorph3DParticles({ particleCount = 25000, onModelChange, photoSpi
         }
         
         // Target size for all models (based on Mae)
-        const targetSize = 0.16 // Adjust this to make all models bigger/smaller
+        const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
+        const targetSize = isMobile ? 0.14 : 0.16 // Slightly smaller on mobile
         
         // Sample points from each model's geometry
         // For HD - collect ALL meshes and merge them
@@ -805,7 +808,7 @@ function ScrollMorph3DParticles({ particleCount = 25000, onModelChange, photoSpi
         }
     }, [])
     
-    // New wheel-based navigation system
+    // New wheel-based navigation system (with mobile touch support)
     useEffect(() => {
         if (!modelsLoaded) return
         
@@ -813,9 +816,12 @@ function ScrollMorph3DParticles({ particleCount = 25000, onModelChange, photoSpi
         let lastWheelTime = 0
         const wheelCooldown = 1000 // 1 second cooldown between transitions
         
-        const handleWheel = (e) => {
-            e.preventDefault()
-            
+        // Touch handling for mobile
+        let touchStartY = 0
+        let touchStartTime = 0
+        
+        // Common navigation logic
+        const navigateToModel = (direction) => {
             const currentTime = Date.now()
             if (isTransitioning || currentTime - lastWheelTime < wheelCooldown) {
                 return
@@ -840,13 +846,13 @@ function ScrollMorph3DParticles({ particleCount = 25000, onModelChange, photoSpi
                     duration: 1.6,
                     ease: "power2.inOut",
                     onComplete: () => {
-                        // Determine direction and target model
+                        // Determine target model based on direction
                         let targetModel
-                        if (e.deltaY > 0) {
-                            // Scroll down - next model
+                        if (direction > 0) {
+                            // Next model
                             targetModel = (currentModelRef.current + 1) % MODELS.length
                         } else {
-                            // Scroll up - previous model
+                            // Previous model
                             targetModel = (currentModelRef.current - 1 + MODELS.length) % MODELS.length
                         }
                         
@@ -894,10 +900,45 @@ function ScrollMorph3DParticles({ particleCount = 25000, onModelChange, photoSpi
             }
         }
         
+        // Wheel handler for desktop
+        const handleWheel = (e) => {
+            e.preventDefault()
+            const direction = e.deltaY > 0 ? 1 : -1
+            navigateToModel(direction)
+        }
+        
+        // Touch handlers for mobile
+        const handleTouchStart = (e) => {
+            touchStartY = e.touches[0].clientY
+            touchStartTime = Date.now()
+        }
+        
+        const handleTouchEnd = (e) => {
+            const touchEndY = e.changedTouches[0].clientY
+            const touchEndTime = Date.now()
+            const deltaY = touchStartY - touchEndY
+            const deltaTime = touchEndTime - touchStartTime
+            
+            // Minimum swipe distance and maximum time for swipe detection
+            const minSwipeDistance = 50
+            const maxSwipeTime = 500
+            
+            if (Math.abs(deltaY) > minSwipeDistance && deltaTime < maxSwipeTime) {
+                e.preventDefault()
+                const direction = deltaY > 0 ? 1 : -1 // Swipe up = next, swipe down = previous
+                navigateToModel(direction)
+            }
+        }
+        
+        // Add event listeners
         window.addEventListener('wheel', handleWheel, { passive: false })
+        window.addEventListener('touchstart', handleTouchStart, { passive: true })
+        window.addEventListener('touchend', handleTouchEnd, { passive: false })
         
         return () => {
             window.removeEventListener('wheel', handleWheel)
+            window.removeEventListener('touchstart', handleTouchStart)
+            window.removeEventListener('touchend', handleTouchEnd)
         }
     }, [modelsLoaded, updateColors, onModelChange])
     
@@ -1086,8 +1127,12 @@ function ScrollMorph3DParticles({ particleCount = 25000, onModelChange, photoSpi
         }
     }, [hideMenu])
     
-    // Mouse movement tracking
+    // Mouse movement tracking (desktop only)
     useEffect(() => {
+        // Skip mouse tracking on mobile
+        const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
+        if (isMobile) return
+        
         const handleMouseMove = (e) => {
             // Normalize mouse position to -1 to 1
             mouseRef.current.x = (e.clientX / window.innerWidth) * 2 - 1
@@ -1109,26 +1154,36 @@ function ScrollMorph3DParticles({ particleCount = 25000, onModelChange, photoSpi
         }
     }, [])
     
-    // Add event listeners
+    // Add event listeners (optimized for mobile/desktop)
     useEffect(() => {
-        window.addEventListener('mousedown', handlePointerDown)
-        window.addEventListener('mouseup', handlePointerUp)
-        window.addEventListener('mouseleave', handlePointerUp)
-        window.addEventListener('mousemove', handlePointerMove)
-        window.addEventListener('touchstart', handlePointerDown)
-        window.addEventListener('touchend', handlePointerUp)
-        window.addEventListener('touchcancel', handlePointerUp)
-        window.addEventListener('touchmove', handlePointerMove)
+        const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
+        
+        if (isMobile) {
+            // Mobile: only touch events
+            window.addEventListener('touchstart', handlePointerDown)
+            window.addEventListener('touchend', handlePointerUp)
+            window.addEventListener('touchcancel', handlePointerUp)
+            window.addEventListener('touchmove', handlePointerMove)
+        } else {
+            // Desktop: only mouse events
+            window.addEventListener('mousedown', handlePointerDown)
+            window.addEventListener('mouseup', handlePointerUp)
+            window.addEventListener('mouseleave', handlePointerUp)
+            window.addEventListener('mousemove', handlePointerMove)
+        }
         
         return () => {
-            window.removeEventListener('mousedown', handlePointerDown)
-            window.removeEventListener('mouseup', handlePointerUp)
-            window.removeEventListener('mouseleave', handlePointerUp)
-            window.removeEventListener('mousemove', handlePointerMove)
-            window.removeEventListener('touchstart', handlePointerDown)
-            window.removeEventListener('touchend', handlePointerUp)
-            window.removeEventListener('touchcancel', handlePointerUp)
-            window.removeEventListener('touchmove', handlePointerMove)
+            if (isMobile) {
+                window.removeEventListener('touchstart', handlePointerDown)
+                window.removeEventListener('touchend', handlePointerUp)
+                window.removeEventListener('touchcancel', handlePointerUp)
+                window.removeEventListener('touchmove', handlePointerMove)
+            } else {
+                window.removeEventListener('mousedown', handlePointerDown)
+                window.removeEventListener('mouseup', handlePointerUp)
+                window.removeEventListener('mouseleave', handlePointerUp)
+                window.removeEventListener('mousemove', handlePointerMove)
+            }
             
             // Clean up timeouts and tweens
             if (holdTimeoutRef.current) {
@@ -1145,18 +1200,22 @@ function ScrollMorph3DParticles({ particleCount = 25000, onModelChange, photoSpi
             materialRef.current.uniforms.uTime.value += delta
         }
         
-        // Smooth rotation lerp
-        currentRotationRef.current.x += (targetRotationRef.current.x - currentRotationRef.current.x) * 0.1
-        currentRotationRef.current.y += (targetRotationRef.current.y - currentRotationRef.current.y) * 0.1
-        
-        // Apply rotation to mesh
-        if (meshRef.current) {
-            meshRef.current.rotation.x = currentRotationRef.current.x
-            meshRef.current.rotation.y = currentRotationRef.current.y
+        // Only do mouse-based animations on desktop
+        const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
+        if (!isMobile) {
+            // Smooth rotation lerp
+            currentRotationRef.current.x += (targetRotationRef.current.x - currentRotationRef.current.x) * 0.1
+            currentRotationRef.current.y += (targetRotationRef.current.y - currentRotationRef.current.y) * 0.1
             
-            // Also add some position offset based on mouse
-            meshRef.current.position.x = mouseRef.current.x * 0.5
-            meshRef.current.position.y = mouseRef.current.y * 0.3
+            // Apply rotation to mesh
+            if (meshRef.current) {
+                meshRef.current.rotation.x = currentRotationRef.current.x
+                meshRef.current.rotation.y = currentRotationRef.current.y
+                
+                // Also add some position offset based on mouse
+                meshRef.current.position.x = mouseRef.current.x * 0.5
+                meshRef.current.position.y = mouseRef.current.y * 0.3
+            }
         }
         
         // Update random karakters elke 0.5 seconde voor dynamisch effect
@@ -1410,7 +1469,7 @@ MODELS.forEach(model => {
 export default function ParticleScene({ onModelChange, onReady, photoSpiralRef }) {
     const particleCount = useMemo(() => {
         const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
-        return isMobile ? 2500 : 5000 // 1.25x meer particles
+        return isMobile ? 2000 : 5000 // Reduced mobile particles for better performance
     }, [])
     
     useEffect(() => {
