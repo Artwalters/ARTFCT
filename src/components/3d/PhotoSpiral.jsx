@@ -683,14 +683,21 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
         )
     }, [])
     
-    // Photo instances
+    // Photo instances met randomized volgorde
     const photoInstances = useMemo(() => {
         const spiralImageCount = 10
         const instances = []
         
+        // Randomize image indices voor organische volgorde
+        const shuffledIndices = [...Array(spiralImageCount)].map((_, i) => i)
+        for (let i = shuffledIndices.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffledIndices[i], shuffledIndices[j]] = [shuffledIndices[j], shuffledIndices[i]]
+        }
+        
         for (let i = 0; i < spiralImageCount; i++) {
             instances.push({
-                index: i,
+                index: shuffledIndices[i], // Use randomized index
                 offset: i / spiralImageCount
             })
         }
@@ -902,12 +909,16 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
                             ? images[instance.index % images.length] 
                             : null
                         
+                        // Verschuif elke curve 2% voor organische dissolve timing
+                        const curveOffset = spiralIndex * 0.02 // 2% per curve
+                        const adjustedOffset = (instance.offset + curveOffset) % 1.0
+                        
                         return (
                             <CosmosPhoto
                                 key={`${spiralIndex}-${idx}`}
                                 index={instance.index}
                                 curve={curve}
-                                offset={instance.offset}
+                                offset={adjustedOffset}
                                 speed={speed}
                                 rotationCurve={rotationCurve}
                                 scaleCurve={scaleCurve}
