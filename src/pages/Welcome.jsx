@@ -6,8 +6,16 @@ export default function Welcome() {
   const [isVisible, setIsVisible] = useState(false)
 
   useEffect(() => {
+    // Apply overflow hidden for this page
+    document.body.style.overflow = 'hidden'
+    
     // Fade in animation
     setTimeout(() => setIsVisible(true), 100)
+    
+    // Cleanup when component unmounts
+    return () => {
+      document.body.style.overflow = ''
+    }
   }, [])
 
   return (

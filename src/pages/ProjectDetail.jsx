@@ -9,9 +9,20 @@ export default function ProjectDetail() {
 
   useEffect(() => {
     window.scrollTo(0, 0)
-    // Set a dark background but ensure content is visible
+    // Set normal scrollable layout for project detail pages
     document.body.style.background = '#000'
+    document.body.style.position = 'static'
     document.body.style.overflow = 'auto'
+    document.body.style.width = 'auto'
+    document.body.style.height = 'auto'
+    
+    // Cleanup when component unmounts
+    return () => {
+      document.body.style.position = ''
+      document.body.style.overflow = ''
+      document.body.style.width = ''
+      document.body.style.height = ''
+    }
   }, [])
 
   if (!project) {

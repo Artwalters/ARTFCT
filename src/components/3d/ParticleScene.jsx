@@ -781,11 +781,6 @@ function ScrollMorph3DParticles({ particleCount = 25000, onModelChange, photoSpi
         
         updateColors(nextCurrent)
         
-        const counter = document.getElementById('model-counter')
-        if (counter) {
-            counter.textContent = `Model ${nextCurrent + 1} / ${MODELS.length}: ${MODELS[nextCurrent].name}`
-        }
-        
         // Update View Project button
         const projectButton = document.getElementById('view-project-button')
         if (projectButton) {
@@ -870,11 +865,6 @@ function ScrollMorph3DParticles({ particleCount = 25000, onModelChange, photoSpi
                         updateColors(targetModel)
                         
                         // Update UI
-                        const counter = document.getElementById('model-counter')
-                        if (counter) {
-                            counter.textContent = `Model ${targetModel + 1} / ${MODELS.length}: ${MODELS[targetModel].name}`
-                        }
-                        
                         const projectButton = document.getElementById('view-project-button')
                         if (projectButton) {
                             projectButton.setAttribute('data-url', MODELS[targetModel].projectUrl)
@@ -1080,12 +1070,6 @@ function ScrollMorph3DParticles({ particleCount = 25000, onModelChange, photoSpi
                 // Update colors
                 updateColors(selectedIndex)
                 
-                // Update counter
-                const counter = document.getElementById('model-counter')
-                if (counter) {
-                    counter.textContent = `Model ${selectedIndex + 1} / ${MODELS.length}: ${MODELS[selectedIndex].name}`
-                }
-                
                 // Update View Project button
                 const projectButton = document.getElementById('view-project-button')
                 if (projectButton) {
@@ -1227,21 +1211,6 @@ function ScrollMorph3DUI() {
             }
             
             
-            .model-counter {
-                position: absolute;
-                top: 30px;
-                left: 50%;
-                transform: translateX(-50%);
-                color: rgba(255, 255, 255, 0.9);
-                font-size: 18px;
-                font-weight: 600;
-                background: rgba(0, 0, 0, 0.6);
-                padding: 12px 24px;
-                border-radius: 20px;
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                backdrop-filter: blur(10px);
-            }
-            
             .wheel-indicator {
                 position: absolute;
                 bottom: 30px;
@@ -1373,19 +1342,6 @@ function ScrollMorph3DUI() {
         const ui = document.createElement('div')
         ui.className = 'scroll-morph-ui'
         ui.innerHTML = `
-            <div class="model-counter" id="model-counter">
-                Model 1 / 4: ${MODELS[0].name}
-            </div>
-            
-            <div class="wheel-indicator">
-                ↑↓ Scroll wheel to navigate between models ↑↓<br>
-                <small>Seamless project switching</small>
-            </div>
-            
-            <div class="hold-indicator">
-                ⭕ Hold for 1 second to access model menu
-            </div>
-            
             <button class="view-project-button" id="view-project-button" data-url="${MODELS[0].projectUrl}">
                 View Project
             </button>

@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber'
-import { Suspense, useState, useMemo, useRef } from 'react'
+import { Suspense, useState, useMemo, useRef, useEffect } from 'react'
 import ParticleScene from '../components/3d/ParticleScene'
 import PhotoSpiral from '../components/3d/PhotoSpiral'
 import Header from '../components/layout/Header'
@@ -9,6 +9,16 @@ export default function ProjectsOverview() {
   const [currentModelIndex, setCurrentModelIndex] = useState(0)
   const [showPhotoSpiral, setShowPhotoSpiral] = useState(false)
   const photoSpiralRef = useRef(null)
+  
+  useEffect(() => {
+    // Apply overflow hidden for this page only
+    document.body.style.overflow = 'hidden'
+    
+    // Cleanup when component unmounts
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [])
   
   // Simple camera setup - no complex config
   const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
@@ -26,7 +36,14 @@ export default function ProjectsOverview() {
   }
   
   return (
-    <>
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100vh',
+      background: '#000'
+    }}>
       <Header />
       <Canvas
         shadows
@@ -37,6 +54,10 @@ export default function ProjectsOverview() {
           position: cameraPosition
         }}
         gl={{ alpha: true }}
+        style={{
+          width: '100%',
+          height: '100%'
+        }}
       >
         <Suspense fallback={null}>
           {/* Particle Scene */}
@@ -56,6 +77,6 @@ export default function ProjectsOverview() {
           )}
         </Suspense>
       </Canvas>
-    </>
+    </div>
   )
 }
