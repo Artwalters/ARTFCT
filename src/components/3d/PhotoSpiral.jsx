@@ -6,6 +6,90 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
 gsap.registerPlugin(ScrollTrigger)
 
+// Code karakters voor dissolve effect (zelfde als ParticleScene)
+const CODE_CHARACTERS = [
+    '[', ']', '{', '}', '(', ')', '<', '>', '/', '\\', 
+    ':', ';', ',', '.', '*', '!', '?', '@', '#', '$',
+    '%', '^', '&', '=', '+', '-', '_', '|', '~', '"',
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
+    'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+    'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D'
+]
+
+// Creëer character atlas (gekopieerd van ParticleScene)
+function createCharacterAtlas() {
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    const charSize = 64
+    const cols = 10
+    const rows = Math.ceil(CODE_CHARACTERS.length / cols)
+    
+    canvas.width = charSize * cols
+    canvas.height = charSize * rows
+    
+    ctx.fillStyle = '#000000'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    
+    ctx.font = 'bold 48px monospace'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    
+    const getVSCodeColor = (char) => {
+        if ('[]'.includes(char)) return '#FFD700'
+        if ('{}'.includes(char)) return '#FFA500'
+        if ('()'.includes(char)) return '#DA70D6'
+        if ('<>'.includes(char)) return '#808080'
+        if ('+-'.includes(char)) return '#569CD6'
+        if ('*/'.includes(char)) return '#4EC9B0'
+        if ('%='.includes(char)) return '#4FC1FF'
+        if ('&|'.includes(char)) return '#C586C0'
+        if ('!~^'.includes(char)) return '#FF6B6B'
+        if (':'.includes(char)) return '#FFFFFF'
+        if (';'.includes(char)) return '#D4D4D4'
+        if (',.'.includes(char)) return '#808080'
+        if ('_'.includes(char)) return '#9CDCFE'
+        if ('@'.includes(char)) return '#DCDCAA'
+        if ('#'.includes(char)) return '#608B4E'
+        if ('$'.includes(char)) return '#9CDCFE'
+        if ('"'.includes(char)) return '#CE9178'
+        if ('0123456789'.includes(char)) return '#B5CEA8'
+        
+        const letterColors = ['#9CDCFE', '#C586C0', '#DCDCAA', '#4EC9B0', '#CE9178', '#D7BA7D']
+        if ('abcdefghijklmnopqrstuvwxyz'.includes(char.toLowerCase())) {
+            const index = char.charCodeAt(0) % letterColors.length
+            return letterColors[index]
+        }
+        
+        return '#D4D4D4'
+    }
+    
+    CODE_CHARACTERS.forEach((char, i) => {
+        const col = i % cols
+        const row = Math.floor(i / cols)
+        const x = col * charSize + charSize / 2
+        const y = row * charSize + charSize / 2
+        
+        const color = getVSCodeColor(char)
+        ctx.fillStyle = color
+        ctx.shadowColor = color
+        ctx.shadowBlur = 10
+        ctx.fillText(char, x, y)
+        
+        ctx.shadowBlur = 20
+        ctx.globalAlpha = 0.5
+        ctx.fillText(char, x, y)
+        ctx.globalAlpha = 1.0
+    })
+    
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.minFilter = THREE.LinearFilter
+    texture.magFilter = THREE.LinearFilter
+    texture.needsUpdate = true
+    
+    return { texture, cols, rows }
+}
+
 // Enhanced vertex shader with Cosmos-style features
 const vertexShader = /* glsl */ `
 uniform float iTime;
@@ -79,10 +163,18 @@ uniform float uMouseSpeedMultiplier;
 uniform float uModeProgress;
 uniform float uFadeInProgress;
 uniform float uYPosMultiplier;
+uniform sampler2D uCharAtlas;
+uniform float uAtlasColumns;
+uniform float uAtlasRows;
 
 // Enhanced noise function
 float random(vec2 st) {
     return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+}
+
+// 3D noise for organic movement
+float noise3D(vec3 p) {
+    return fract(sin(dot(p, vec3(12.9898, 78.233, 45.543))) * 43758.5453);
 }
 
 // Multiple noise layers for complex dissolve
@@ -117,94 +209,86 @@ void main(){
     float speedEffect = 1.0 + uMouseSpeedMultiplier * 10.0;
     baseOpacity *= speedEffect;
     
-    // Enhanced dissolve system (more like Cosmos particles)
+    // Grid-based dissolve system - foto wordt blokje voor blokje opgegeten
     float finalAlpha = baseOpacity;
     
     if (uDissolveProgress > 0.01) {
-        // Multiple dissolve layers for complexity
-        vec2 gridSize1 = vec2(12.0, 12.0);
-        vec2 gridSize2 = vec2(8.0, 8.0);
-        vec2 gridSize3 = vec2(16.0, 16.0);
+        // Grid voor smooth blokjes overgang
+        vec2 gridSize = vec2(8.0, 10.0); // Minder blokjes
+        vec2 gridUV = fract(uv * gridSize);
+        vec2 gridCell = floor(uv * gridSize);
+        float cellRandom = random(gridCell);
         
-        // Primary grid dissolution
-        vec2 gridUV1 = fract(uv * gridSize1);
-        vec2 gridCell1 = floor(uv * gridSize1);
-        float cellRandom1 = random(gridCell1);
+        // Dissolve threshold per blokje - elk blokje heeft eigen timing
+        float dissolveThreshold = cellRandom * 0.7 + 0.2; // Spread van 0.2 tot 0.9
         
-        // Secondary grid for more complex pattern
-        vec2 gridUV2 = fract(uv * gridSize2 + 0.5);
-        vec2 gridCell2 = floor(uv * gridSize2 + 0.5);
-        float cellRandom2 = random(gridCell2 + vec2(100.0, 100.0));
+        // Check of dit blokje al opgegeten moet worden
+        float blockDissolveProgress = (uDissolveProgress - dissolveThreshold) / (1.0 - dissolveThreshold);
+        blockDissolveProgress = clamp(blockDissolveProgress, 0.0, 1.0);
         
-        // Tertiary grid for fine details
-        vec2 gridUV3 = fract(uv * gridSize3 + 0.25);
-        vec2 gridCell3 = floor(uv * gridSize3 + 0.25);
-        float cellRandom3 = random(gridCell3 + vec2(200.0, 200.0));
-        
-        // Combine multiple dissolve patterns
-        float dissolveThreshold = uDissolveProgress;
-        float dissolvePattern = mix(
-            mix(cellRandom1, cellRandom2, 0.6),
-            cellRandom3,
-            0.3
-        );
-        
-        // More sophisticated particle shapes
-        float gapSize = 0.08;
-        float particleMask1 = 1.0;
-        if (gridUV1.x < gapSize || gridUV1.x > 1.0 - gapSize || 
-            gridUV1.y < gapSize || gridUV1.y > 1.0 - gapSize) {
-            particleMask1 = 0.0;
-        }
-        
-        float particleMask2 = 1.0;
-        if (gridUV2.x < gapSize * 0.7 || gridUV2.x > 1.0 - gapSize * 0.7 || 
-            gridUV2.y < gapSize * 0.7 || gridUV2.y > 1.0 - gapSize * 0.7) {
-            particleMask2 = 0.0;
-        }
-        
-        // Combine particle masks
-        float combinedMask = max(particleMask1 * 0.8, particleMask2 * 0.6);
-        
-        // Determine if particle should be kept
-        float keepParticle = step(dissolveThreshold, dissolvePattern);
-        
-        // Enhanced VS Code colors with more variety
-        if (keepParticle > 0.0 && dissolvePattern < dissolveThreshold + 0.2) {
-            float glowStrength = 1.0 - (dissolvePattern - dissolveThreshold) / 0.2;
+        if (blockDissolveProgress > 0.0) {
+            // Dit blokje wordt opgegeten
             
-            // More sophisticated color selection
-            float colorSeed = random(gridCell1 + gridCell2 * 0.5);
-            vec3 particleColor;
+            // Pick character voor dit blokje
+            float charIndex = mod(cellRandom * 70.0 + floor(iTime * 2.0), 70.0);
+            float charCol = mod(charIndex, uAtlasColumns);
+            float charRow = floor(charIndex / uAtlasColumns);
             
-            float colorIndex = floor(colorSeed * 8.0);
+            // Deformation voor depth - particles bewegen
+            float deformTime = iTime + cellRandom * 6.28;
+            vec2 deformation = vec2(
+                sin(deformTime * 1.5) * 0.1,
+                cos(deformTime * 1.2) * 0.1
+            );
             
-            if (colorIndex == 0.0) {
-                particleColor = vec3(0.61, 0.86, 0.996); // #9CDCFE lichtblauw
-            } else if (colorIndex == 1.0) {
-                particleColor = vec3(0.773, 0.525, 0.753); // #C586C0 paars
-            } else if (colorIndex == 2.0) {
-                particleColor = vec3(0.863, 0.855, 0.667); // #DCDCAA geel
-            } else if (colorIndex == 3.0) {
-                particleColor = vec3(0.306, 0.788, 0.69); // #4EC9B0 turquoise
-            } else if (colorIndex == 4.0) {
-                particleColor = vec3(0.808, 0.569, 0.471); // #CE9178 oranje
-            } else if (colorIndex == 5.0) {
-                particleColor = vec3(0.843, 0.733, 0.49); // #D7BA7D licht oranje
-            } else if (colorIndex == 6.0) {
-                particleColor = vec3(0.569, 0.792, 0.349); // #91CA59 groen
+            // Z-depth simulatie door scaling
+            float depthScale = 0.8 + sin(deformTime * 2.0 + cellRandom * 3.14) * 0.2;
+            vec2 deformedUV = (gridUV - 0.5) * depthScale + 0.5 + deformation;
+            
+            // Sample character van atlas
+            vec2 charCellUV = vec2(
+                (charCol + clamp(deformedUV.x, 0.0, 1.0)) / uAtlasColumns,
+                1.0 - (charRow + 1.0 - clamp(deformedUV.y, 0.0, 1.0)) / uAtlasRows
+            );
+            
+            vec4 charColor = texture(uCharAtlas, charCellUV);
+            
+            // Smooth overgang van foto naar particle
+            if (charColor.r > 0.1 || charColor.g > 0.1 || charColor.b > 0.1) {
+                // Flickering voor particles
+                float flicker = 0.8 + sin(iTime * 10.0 + cellRandom * 20.0) * 0.2;
+                
+                // Mix tussen originele foto en particle
+                vec3 particleColor = charColor.rgb * flicker;
+                
+                // Depth-based brightness
+                float depthBrightness = 0.7 + depthScale * 0.3;
+                particleColor *= depthBrightness;
+                
+                // Smooth blending - eerst glow, dan overgang
+                float transitionProgress = smoothstep(0.0, 1.0, blockDissolveProgress);
+                
+                // Glow effect aan begin van overgang
+                float glowIntensity = 1.0 - transitionProgress;
+                vec3 glowColor = col * (1.0 + glowIntensity * 2.0);
+                
+                // Mix: foto -> glow -> particle
+                if (transitionProgress < 0.3) {
+                    // Glow fase
+                    col = mix(col, glowColor, transitionProgress / 0.3);
+                } else {
+                    // Overgang naar particle
+                    float particleBlend = (transitionProgress - 0.3) / 0.7;
+                    col = mix(glowColor, particleColor, particleBlend);
+                }
             } else {
-                particleColor = vec3(0.831, 0.831, 0.831); // #D4D4D4 wit
+                // Geen character - fade naar zwart
+                float fadeProgress = smoothstep(0.0, 1.0, blockDissolveProgress);
+                col = mix(col, vec3(0.0), fadeProgress);
+                finalAlpha *= (1.0 - fadeProgress * 0.7);
             }
-            
-            // Apply glow effect
-            col = mix(col, particleColor, glowStrength * 0.7);
-            col *= 1.0 + glowStrength * 1.2;
         }
-        
-        // Apply sophisticated dissolve transition
-        float dissolveTransition = smoothstep(0.0, 0.3, uDissolveProgress);
-        finalAlpha *= mix(1.0, combinedMask * keepParticle, dissolveTransition);
+        // Als blokje nog niet opgegeten wordt, houd originele foto
     }
     
     // Dark mode support (like Cosmos)
@@ -240,7 +324,7 @@ void main(){
 `;
 
 // Enhanced Photo component with Cosmos features
-function CosmosPhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurve, opacityCurve, imageUrl, tweenParams, isPaused }) {
+function CosmosPhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurve, opacityCurve, imageUrl, tweenParams, isPaused, characterAtlas }) {
     const meshRef = useRef()
     const progressRef = useRef(offset)
     const [imageLoaded, setImageLoaded] = useState(false)
@@ -351,10 +435,13 @@ function CosmosPhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
                 uCameraMultiplier: { value: 0 },
                 uModeProgress: { value: 0 },
                 uFadeInProgress: { value: 1 },
-                uYPosMultiplier: { value: 2.5 }
+                uYPosMultiplier: { value: 2.5 },
+                uCharAtlas: { value: characterAtlas?.texture || null },
+                uAtlasColumns: { value: characterAtlas?.cols || 10 },
+                uAtlasRows: { value: characterAtlas?.rows || 7 }
             }
         })
-    }, [fallbackTexture])
+    }, [fallbackTexture, characterAtlas])
     
     // Update material uniforms when texture changes
     useEffect(() => {
@@ -431,7 +518,7 @@ function CosmosPhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
         }
         
         // Enhanced dissolve calculation with speed-based triggering
-        const dissolveStart = 0.82
+        const dissolveStart = 0.72
         
         // COSMOS EFFECT: Speed burst can also trigger dissolve
         const speedBasedDissolve = speedMultiplier > 0.01 ? speedMultiplier * 2 : 0
@@ -456,7 +543,7 @@ function CosmosPhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
         // Vertical orientation (portrait)
         const baseWidth = 1.0   // Portrait width
         const baseHeight = 1.25 // Portrait height (4:5 aspect ratio)
-        const scale = 1.30      // 20% larger: 1.08 * 1.2 = 1.296 ≈ 1.30
+        const scale = 1.43      // 30% larger: 1.30 * 1.1 = 1.43
         
         return [baseWidth * scale, baseHeight * scale]
     }, [])
@@ -475,6 +562,9 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
     const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
     const targetRotation = useRef({ x: 0, y: 0 })
     const currentRotation = useRef({ x: 0, y: 0 })
+    
+    // Create character atlas once
+    const characterAtlas = useMemo(() => createCharacterAtlas(), [])
     
     // Cosmos-style state management
     const [isPaused, setIsPaused] = useState(false)
@@ -577,10 +667,10 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
 
     const scaleCurve = useMemo(() => {
         return new THREE.CubicBezierCurve(
-            new THREE.Vector2(0, 0),
-            new THREE.Vector2(0.55, 0),
-            new THREE.Vector2(1, 0.45),
-            new THREE.Vector2(1, 1)
+            new THREE.Vector2(0, 0),          // Start: scale 0
+            new THREE.Vector2(0.55, 0),       // 55% progress: still scale 0
+            new THREE.Vector2(1, 0.35),       // End: scale 0.35 (was 0.45, now 10% larger)
+            new THREE.Vector2(1, 0.9)         // Keep 10% of size (was 1, now 0.9)
         )
     }, [])
 
@@ -825,6 +915,7 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
                                 imageUrl={imageUrl}
                                 tweenParams={tweenParams.current}
                                 isPaused={isPaused}
+                                characterAtlas={characterAtlas}
                             />
                         )
                     })}
