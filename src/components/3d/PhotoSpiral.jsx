@@ -77,6 +77,8 @@ uniform float uDissolveProgress;
 uniform float uSpeedMultiplier;
 uniform float uMouseSpeedMultiplier;
 uniform float uModeProgress;
+uniform float uFadeInProgress;
+uniform float uYPosMultiplier;
 
 // Enhanced noise function
 float random(vec2 st) {
@@ -215,6 +217,21 @@ void main(){
     float flicker = sin(iTime * 3.0 + vWorldPosition.x * 10.0) * flickerIntensity;
     finalAlpha *= (1.0 + flicker);
     
+    // Fade-in effect based on Y position and progress
+    if (uFadeInProgress < 1.0) {
+        // Normalize Y position (adjust based on your curve's Y range)
+        float normalizedY = (vWorldPosition.y + 2.0) / 4.0; // Assuming Y range is roughly -2 to 2
+        
+        // Create sine wave for smooth fade
+        float yPosSin = sin(normalizedY * 3.14159 * uYPosMultiplier);
+        
+        // Combine Y position with fade progress for wave effect
+        float fadeInAlpha = uFadeInProgress + yPosSin * (1.0 - uFadeInProgress) * 0.3;
+        
+        // Apply smooth fade-in
+        finalAlpha *= smoothstep(0.0, 1.0, fadeInAlpha);
+    }
+    
     // Discard fully transparent pixels
     if (finalAlpha < 0.01) discard;
     
@@ -332,7 +349,9 @@ function CosmosPhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
                 uSpeedMultiplier: { value: 0 },
                 uMouseSpeedMultiplier: { value: 0 },
                 uCameraMultiplier: { value: 0 },
-                uModeProgress: { value: 0 }
+                uModeProgress: { value: 0 },
+                uFadeInProgress: { value: 1 },
+                uYPosMultiplier: { value: 2.5 }
             }
         })
     }, [fallbackTexture])
@@ -390,6 +409,26 @@ function CosmosPhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
         material.uniforms.uSpeedMultiplier.value = speedMultiplier
         material.uniforms.uMouseSpeedMultiplier.value = mouseSpeedMultiplier
         material.uniforms.uCameraMultiplier.value = tweenParams.cameraMultiplier || 0
+        
+        // Calculate fade-in progress for beginning of animation
+        // Photos fade in during first 15% of their journey (0.0 to 0.15)
+        const fadeInDuration = 0.15
+        const fadeInProgress = Math.min(1.0, i / fadeInDuration)
+        material.uniforms.uFadeInProgress.value = fadeInProgress
+        
+        // Dynamic opacity curve shift for leegloop effect
+        // Shift the opacity curve based on leegloop progress to create fade-out
+        const leegloopShift = (tweenParams.leegloopProgress || 0) * 0.8 // Max shift 80%
+        const adjustedOpacityProgress = Math.max(0, i - leegloopShift)
+        
+        // Recalculate opacity with shifted curve
+        const shiftedOpacityPoint = new THREE.Vector2()
+        opacityCurve.getPointAt(Math.min(1, adjustedOpacityProgress), shiftedOpacityPoint)
+        
+        // Override the normal opacity calculation when leegloop is active
+        if (tweenParams.leegloopProgress > 0) {
+            material.uniforms.uOpacity.value = shiftedOpacityPoint.y * (tweenParams.opacityMultiplier || 1)
+        }
         
         // Enhanced dissolve calculation with speed-based triggering
         const dissolveStart = 0.82
@@ -457,7 +496,8 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
         opacityMultiplier: 1,
         groupScale: 1,
         mouseSpeedMultiplier: 0,
-        cameraMultiplier: 0
+        cameraMultiplier: 0,
+        leegloopProgress: 0  // Voor opacity curve shift effect
     })
     
     // Expose methods for external control (wheel navigation)
@@ -471,6 +511,7 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
                 speedMultiplier: 0.05,
                 opacityMultiplier: 0,
                 groupScale: 0,
+                leegloopProgress: 1,  // Shift opacity curve for fade-out
                 duration: 1.6,  // Same as particle vacuum
                 ease: "power2.inOut"  // Same easing as particle vacuum
             })
@@ -492,6 +533,7 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
                 speedMultiplier: 0,
                 opacityMultiplier: 1,
                 groupScale: 1,
+                leegloopProgress: 0,  // Reset opacity curve shift
                 duration: 1.8,  // Same as particle return
                 ease: "power2.inOut"  // Same easing as particle return
             })
@@ -545,10 +587,10 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
 
     const opacityCurve = useMemo(() => {
         return new THREE.CubicBezierCurve(
-            new THREE.Vector2(0, 0),
-            new THREE.Vector2(0, 0.55),
-            new THREE.Vector2(0.45, 1),
-            new THREE.Vector2(1, 1)
+            new THREE.Vector2(0, 0),        // Start: volledig onzichtbaar
+            new THREE.Vector2(0.8, 0),      // Tot 80% onzichtbaar blijven
+            new THREE.Vector2(0.85, 0.5),   // Snelle overgang beginnen bij 85%
+            new THREE.Vector2(1, 1)         // Volledig zichtbaar bij 100%
         )
     }, [])
     
@@ -647,6 +689,7 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
                     speedMultiplier: 0.05,  // Much higher like Cosmos (was 1.0 in ref)
                     opacityMultiplier: 0,   // Fade to invisible
                     groupScale: 0,          // Shrink to nothing
+                    leegloopProgress: 1,    // Shift opacity curve for fade-out
                     duration: 0.8,
                     ease: "expo.in"
                 })
@@ -682,6 +725,7 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
                     speedMultiplier: 0,
                     opacityMultiplier: 1,
                     groupScale: 1,
+                    leegloopProgress: 0,  // Reset opacity curve shift
                     duration: 2,
                     ease: "power1.inOut"
                 })
