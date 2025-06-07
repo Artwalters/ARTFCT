@@ -75,7 +75,7 @@ export default function ProjectsOverview() {
             <PhotoSpiral 
               ref={photoSpiralRef}
               images={photoImages}
-              speed={1}
+              speed={0.5}
             />
           )}
         </Suspense>

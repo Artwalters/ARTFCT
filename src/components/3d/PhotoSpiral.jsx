@@ -2,93 +2,9 @@ import React, { useRef, useMemo, useEffect, useState, useCallback, useImperative
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import gsap from 'gsap'
-import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { createCharacterAtlas } from '../../utils/characterAtlas'
+import { isMobile } from '../../utils/deviceDetection'
 
-gsap.registerPlugin(ScrollTrigger)
-
-// Code karakters voor dissolve effect (zelfde als ParticleScene)
-const CODE_CHARACTERS = [
-    '[', ']', '{', '}', '(', ')', '<', '>', '/', '\\', 
-    ':', ';', ',', '.', '*', '!', '?', '@', '#', '$',
-    '%', '^', '&', '=', '+', '-', '_', '|', '~', '"',
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
-    'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
-    'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D'
-]
-
-// Creëer character atlas (gekopieerd van ParticleScene)
-function createCharacterAtlas() {
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    const charSize = 64
-    const cols = 10
-    const rows = Math.ceil(CODE_CHARACTERS.length / cols)
-    
-    canvas.width = charSize * cols
-    canvas.height = charSize * rows
-    
-    ctx.fillStyle = '#000000'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-    
-    ctx.font = 'bold 48px monospace'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    
-    const getVSCodeColor = (char) => {
-        if ('[]'.includes(char)) return '#FFD700'
-        if ('{}'.includes(char)) return '#FFA500'
-        if ('()'.includes(char)) return '#DA70D6'
-        if ('<>'.includes(char)) return '#808080'
-        if ('+-'.includes(char)) return '#569CD6'
-        if ('*/'.includes(char)) return '#4EC9B0'
-        if ('%='.includes(char)) return '#4FC1FF'
-        if ('&|'.includes(char)) return '#C586C0'
-        if ('!~^'.includes(char)) return '#FF6B6B'
-        if (':'.includes(char)) return '#FFFFFF'
-        if (';'.includes(char)) return '#D4D4D4'
-        if (',.'.includes(char)) return '#808080'
-        if ('_'.includes(char)) return '#9CDCFE'
-        if ('@'.includes(char)) return '#DCDCAA'
-        if ('#'.includes(char)) return '#608B4E'
-        if ('$'.includes(char)) return '#9CDCFE'
-        if ('"'.includes(char)) return '#CE9178'
-        if ('0123456789'.includes(char)) return '#B5CEA8'
-        
-        const letterColors = ['#9CDCFE', '#C586C0', '#DCDCAA', '#4EC9B0', '#CE9178', '#D7BA7D']
-        if ('abcdefghijklmnopqrstuvwxyz'.includes(char.toLowerCase())) {
-            const index = char.charCodeAt(0) % letterColors.length
-            return letterColors[index]
-        }
-        
-        return '#D4D4D4'
-    }
-    
-    CODE_CHARACTERS.forEach((char, i) => {
-        const col = i % cols
-        const row = Math.floor(i / cols)
-        const x = col * charSize + charSize / 2
-        const y = row * charSize + charSize / 2
-        
-        const color = getVSCodeColor(char)
-        ctx.fillStyle = color
-        ctx.shadowColor = color
-        ctx.shadowBlur = 10
-        ctx.fillText(char, x, y)
-        
-        ctx.shadowBlur = 20
-        ctx.globalAlpha = 0.5
-        ctx.fillText(char, x, y)
-        ctx.globalAlpha = 1.0
-    })
-    
-    const texture = new THREE.CanvasTexture(canvas)
-    texture.minFilter = THREE.LinearFilter
-    texture.magFilter = THREE.LinearFilter
-    texture.needsUpdate = true
-    
-    return { texture, cols, rows }
-}
 
 // Enhanced vertex shader with Cosmos-style features
 const vertexShader = /* glsl */ `
@@ -105,6 +21,9 @@ uniform float uScale;
 uniform float uSpeedMultiplier;
 uniform float uMouseSpeedMultiplier;
 uniform float uCameraMultiplier;
+uniform float uDissolveProgress;
+uniform vec3 uWindDirection;
+uniform float uWindForce;
 
 mat2 rotation2d(float angle){
     float s=sin(angle);
@@ -118,6 +37,11 @@ mat2 rotation2d(float angle){
 
 vec2 rotate(vec2 v,float angle){
     return rotation2d(angle)*v;
+}
+
+// Pseudo random based on position
+float random(vec2 st) {
+    return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
 }
 
 void main(){
@@ -137,6 +61,34 @@ void main(){
     float timeOffset = iTime + uRotation * 10.0;
     p.x += sin(timeOffset * 0.5 + uPosition.z * 0.1) * 0.02;
     p.y += cos(timeOffset * 0.7 + uPosition.z * 0.1) * 0.02;
+    
+    // SUBTLE DRIFT EFFECT - particles drijven heel langzaam weg
+    if (uDissolveProgress > 0.65) {
+        float driftPhase = (uDissolveProgress - 0.65) / 0.35; // Last 35% of dissolve
+        
+        // Random per vertex voor natuurlijk effect
+        float vertexRandom = random(position.xy + vec2(uRotation));
+        float driftDelay = vertexRandom * 0.6; // Kortere delays voor vloeiendheid
+        
+        // Veel vloeiendere overgang met cubic easing
+        float driftProgress = max(0.0, (driftPhase - driftDelay) / (1.0 - driftDelay));
+        float driftStrength = driftProgress * driftProgress * (3.0 - 2.0 * driftProgress); // Cubic smoothstep
+        
+        // Heel subtiele beweging naar achteren
+        vec3 driftForce = vec3(0.0, 0.0, -0.015); // Nog langzamer
+        
+        // Minimale random drift - veel subtieler zonder trilling
+        float turbX = sin(iTime * 0.1 + vertexRandom * 1.0) * 0.003;
+        float turbY = cos(iTime * 0.08 + vertexRandom * 0.8) * 0.003;
+        driftForce.x += turbX;
+        driftForce.y += turbY;
+        
+        // Apply zeer subtiele displacement
+        p += driftForce * driftStrength * iTime * 0.08;
+        
+        // Heel langzaam kleiner worden met vloeiende curve
+        dynamicScale *= (1.0 - driftStrength * 0.25);
+    }
     
     // Store world position for fragment shader
     vWorldPosition = p;
@@ -166,6 +118,8 @@ uniform float uYPosMultiplier;
 uniform sampler2D uCharAtlas;
 uniform float uAtlasColumns;
 uniform float uAtlasRows;
+uniform float uWindForce;
+uniform vec3 uWindDirection;
 
 // Enhanced noise function
 float random(vec2 st) {
@@ -229,8 +183,10 @@ void main(){
         if (blockDissolveProgress > 0.0) {
             // Dit blokje wordt opgegeten
             
-            // Pick character voor dit blokje
-            float charIndex = mod(cellRandom * 70.0 + floor(iTime * 2.0), 70.0);
+            // Pick random character voor dit blokje - meer randomness
+            float timeVariation = floor(iTime * 3.0); // Snellere wisseling
+            float spatialRandom = fract(sin(dot(gridCell, vec2(12.9898, 78.233))) * 43758.5453); // Extra spatial randomness
+            float charIndex = mod(cellRandom * 70.0 + spatialRandom * 25.0 + timeVariation, 70.0);
             float charCol = mod(charIndex, uAtlasColumns);
             float charRow = floor(charIndex / uAtlasColumns);
             
@@ -243,6 +199,30 @@ void main(){
             
             // Z-depth simulatie door scaling
             float depthScale = 0.8 + sin(deformTime * 2.0 + cellRandom * 3.14) * 0.2;
+            
+            // Subtle drift effect in fragment shader
+            if (blockDissolveProgress > 0.65 && uDissolveProgress > 0.65) {
+                // Start drift effect in laatste fase
+                float driftProgress = (blockDissolveProgress - 0.65) / 0.35;
+                float particleDriftDelay = cellRandom * 0.6; // Kortere delays voor vloeiendheid
+                
+                // Vloeiendere overgang met cubic easing
+                float adjustedProgress = max(0.0, (driftProgress - particleDriftDelay) / (1.0 - particleDriftDelay));
+                float driftEffect = adjustedProgress * adjustedProgress * (3.0 - 2.0 * adjustedProgress);
+                
+                // Minimale deformation - bijna onzichtbaar, geen trilling
+                vec2 driftOffset = vec2(
+                    sin(iTime * 0.05 + cellRandom * 0.5) * 0.001,
+                    cos(iTime * 0.04 + cellRandom * 0.4) * 0.001
+                ) * driftEffect;
+                
+                // Apply minimale displacement
+                deformation += driftOffset;
+                
+                // Heel langzaam kleiner worden met vloeiende curve
+                depthScale *= (1.0 - driftEffect * 0.15);
+            }
+            
             vec2 deformedUV = (gridUV - 0.5) * depthScale + 0.5 + deformation;
             
             // Sample character van atlas
@@ -255,18 +235,20 @@ void main(){
             
             // Smooth overgang van foto naar particle
             if (charColor.r > 0.1 || charColor.g > 0.1 || charColor.b > 0.1) {
-                // Flickering voor particles
-                float flicker = 0.8 + sin(iTime * 10.0 + cellRandom * 20.0) * 0.2;
+                // Flickering voor particles - per particle variatie
+                float particleFlickerSpeed = 8.0 + spatialRandom * 6.0; // Variabele flicker snelheid
+                float flicker = 0.7 + sin(iTime * particleFlickerSpeed + cellRandom * 20.0) * 0.3;
                 
                 // Mix tussen originele foto en particle
                 vec3 particleColor = charColor.rgb * flicker;
                 
-                // Depth-based brightness
-                float depthBrightness = 0.7 + depthScale * 0.3;
+                // Depth-based brightness met variatie
+                float depthBrightness = 0.6 + depthScale * 0.4 + spatialRandom * 0.2;
                 particleColor *= depthBrightness;
                 
-                // Make particles brighter to compensate for dark background
-                particleColor *= 2.5; // Extra bright particles (1.5 + 1.0 = 2.5x)
+                // Random brightness per particle voor meer diversiteit
+                float particleBrightness = 2.0 + spatialRandom * 1.0; // 2.0 - 3.0x brightness
+                particleColor *= particleBrightness;
                 
                 // Smooth blending - eerst glow, dan overgang
                 float transitionProgress = smoothstep(0.0, 1.0, blockDissolveProgress);
@@ -275,14 +257,27 @@ void main(){
                 float glowIntensity = 1.0 - transitionProgress;
                 vec3 glowColor = col * (1.0 + glowIntensity * 2.0);
                 
-                // Mix: foto -> glow -> particle
-                if (transitionProgress < 0.3) {
-                    // Glow fase
-                    col = mix(col, glowColor, transitionProgress / 0.3);
+                // Mix: foto -> glow -> particle -> drift fade (overlappende fases)
+                if (transitionProgress < 0.4) {
+                    // Glow fase - subtiele start
+                    float glowBlend = smoothstep(0.0, 0.4, transitionProgress);
+                    col = mix(col, glowColor, glowBlend);
+                } else if (transitionProgress < 0.75) {
+                    // Overgang naar particle - overlappend met glow
+                    float particleStart = smoothstep(0.25, 0.75, transitionProgress);
+                    col = mix(glowColor, particleColor, particleStart);
                 } else {
-                    // Overgang naar particle
-                    float particleBlend = (transitionProgress - 0.3) / 0.7;
-                    col = mix(glowColor, particleColor, particleBlend);
+                    // Gentle fade out - begint al bij 75% en overloopt met particle fase
+                    float fadeStart = smoothstep(0.65, 1.0, transitionProgress);
+                    float particleFadeDelay = cellRandom * 0.5; // Kortere delays voor meer overlap
+                    
+                    // Vloeiendere fade met cubic easing en vroegere start
+                    float adjustedFadeProgress = max(0.0, (fadeStart - particleFadeDelay) / (1.0 - particleFadeDelay));
+                    float gentleFade = adjustedFadeProgress * adjustedFadeProgress * (3.0 - 2.0 * adjustedFadeProgress);
+                    
+                    // Zachte overgang van particle naar fade
+                    col = mix(particleColor, particleColor * 0.8, gentleFade * 0.3);
+                    finalAlpha *= (1.0 - gentleFade * 0.92); // Geleidelijke fade out
                 }
             } else {
                 // Geen character - fade naar zwart
@@ -333,8 +328,6 @@ function CosmosPhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
     const [imageLoaded, setImageLoaded] = useState(false)
     const [imageTexture, setImageTexture] = useState(null)
     
-    // Detect mobile device for performance optimizations
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
     
     // Create fallback colored texture
     const fallbackTexture = useMemo(() => {
@@ -372,7 +365,7 @@ function CosmosPhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
                 if (cancelled) return
                 
                 // Resize image for mobile performance
-                const maxSize = isMobile ? 512 : 1024
+                const maxSize = isMobile() ? 512 : 1024
                 let width = img.width
                 let height = img.height
                 
@@ -464,7 +457,9 @@ function CosmosPhoto({ index, curve, offset, speed = 1, rotationCurve, scaleCurv
                 uYPosMultiplier: { value: 2.5 },
                 uCharAtlas: { value: characterAtlas?.texture || null },
                 uAtlasColumns: { value: characterAtlas?.cols || 10 },
-                uAtlasRows: { value: characterAtlas?.rows || 7 }
+                uAtlasRows: { value: characterAtlas?.rows || 7 },
+                uWindForce: { value: 0.8 },
+                uWindDirection: { value: new THREE.Vector3(0.8, 0.3, 0.2).normalize() }
             }
         })
     }, [fallbackTexture, characterAtlas])
@@ -589,8 +584,6 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
     const targetRotation = useRef({ x: 0, y: 0 })
     const currentRotation = useRef({ x: 0, y: 0 })
     
-    // Detect mobile device for performance optimizations (early declaration)
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
     
     // Create character atlas once
     const characterAtlas = useMemo(() => createCharacterAtlas(), [])
@@ -666,7 +659,7 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
     
     // 3D curve (scaled down for mobile)
     const curve = useMemo(() => {
-        const scale = isMobile ? 0.8 : 1.0 // 20% smaller on mobile
+        const scale = isMobile() ? 0.8 : 1.0 // 20% smaller on mobile
         
         const curvePoints = [
             new THREE.Vector3(-7 * scale, -1 * scale, -8),
@@ -739,7 +732,7 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
     // Cosmos-style mouse tracking with drag detection (desktop only)
     useEffect(() => {
         // Skip mouse events on mobile
-        if (isMobile) return
+        if (isMobile()) return
         
         const handleMouseDown = (e) => {
             setMouseDown(true)
@@ -910,7 +903,7 @@ const PhotoSpiralCosmos = React.forwardRef(({ images = [], speed = 1, onLongHold
     useFrame((state, delta) => {
         if (groupRef.current) {
             // Only do mouse-based animations on desktop
-            if (!isMobile) {
+            if (!isMobile()) {
                 // Smooth rotation lerp (like Cosmos)
                 currentRotation.current.x += (targetRotation.current.x - currentRotation.current.x) * 0.1
                 currentRotation.current.y += (targetRotation.current.y - currentRotation.current.y) * 0.1

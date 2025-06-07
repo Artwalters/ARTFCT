@@ -27,33 +27,12 @@ function AppContent() {
       canvases.forEach(canvas => {
         canvas.style.display = 'none'
       })
-      // Hide scroll wrapper
-      const scrollWrapper = document.querySelector('.scroll-wrapper')
-      if (scrollWrapper) {
-        scrollWrapper.style.display = 'none'
-      }
-      // Hide scroll morph UI
-      const scrollMorphUI = document.querySelector('.scroll-morph-ui')
-      if (scrollMorphUI) {
-        scrollMorphUI.style.display = 'none'
-      }
     } else {
       document.body.style.overflow = 'hidden'
       const canvases = document.querySelectorAll('canvas')
       canvases.forEach(canvas => {
         canvas.style.display = 'block'
       })
-      // Show scroll wrapper if on projects page
-      if (location.pathname === '/projects') {
-        const scrollWrapper = document.querySelector('.scroll-wrapper')
-        if (scrollWrapper) {
-          scrollWrapper.style.display = 'block'
-        }
-        const scrollMorphUI = document.querySelector('.scroll-morph-ui')
-        if (scrollMorphUI) {
-          scrollMorphUI.style.display = 'block'
-        }
-      }
     }
   }, [location])
   
