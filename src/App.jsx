@@ -4,15 +4,15 @@ import Welcome from './pages/Welcome'
 import Landing from './pages/Landing'
 import ProjectsOverview from './pages/ProjectsOverview'
 import ProjectDetail from './pages/ProjectDetail'
+import LogoParticles from './pages/LogoParticles'
 
 function AppContent() {
   const location = useLocation()
   
   useEffect(() => {
-    // Mobile performance warning
+    // Mobile detection
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
     if (isMobile) {
-      console.warn('Mobile device detected - running with reduced performance settings')
       // Set mobile-specific CSS
       document.documentElement.style.setProperty('--mobile-device', '1')
     }
@@ -42,6 +42,7 @@ function AppContent() {
       <Route path="/intro" element={<Landing />} />
       <Route path="/projects" element={<ProjectsOverview />} />
       <Route path="/project/:projectId" element={<ProjectDetail />} />
+      <Route path="/logoparticles" element={<LogoParticles />} />
     </Routes>
   )
 }
